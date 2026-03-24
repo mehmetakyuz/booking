@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spec-Based Development Presentation</title>
+    <style>
+      :root {
+        --brand-primary: #ff791a;
+        --brand-secondary: #0098a8;
+        --brand-black: #17171a;
+        --page-bg: #f2f2f2;
+        --surface: #ffffff;
+        --surface-muted: #f7f7f7;
+        --text: #17171a;
+        --text-muted: #5f6368;
+        --border: #dddddd;
+        --shadow: 0 18px 44px rgba(23, 23, 26, 0.12);
+        --radius: 24px;
+        --max-width: 1200px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--page-bg);
+        color: var(--text);
+        font-family: "Source Sans Pro", "Segoe UI", sans-serif;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      .deck-shell {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .deck-topbar {
+        background: var(--brand-black);
+        color: white;
+        padding: 18px 28px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .deck-brand {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .deck-brand img {
+        width: 180px;
+        height: auto;
+        display: block;
+      }
+
+      .deck-brand-copy small {
+        display: block;
+        color: rgba(255, 255, 255, 0.7);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 11px;
+        margin-bottom: 4px;
+      }
+
+      .deck-brand-copy strong {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .deck-meta {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 14px;
+      }
+
+      .deck-stage {
+        color: white;
+        padding: 6px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 999px;
+      }
+
+      .slides-frame {
+        position: relative;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      .slides-track {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        transition: transform 320ms ease;
+      }
+
+      .slide {
+        width: 100%;
+        flex: 0 0 100%;
+        overflow: auto;
+        padding: 38px 28px 112px;
+      }
+
+      .slide-inner {
+        width: min(100%, var(--max-width));
+        margin: 0 auto;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 42px 44px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--brand-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        font-family: "Source Serif Pro", Georgia, serif;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+      }
+
+      h1 {
+        font-size: clamp(46px, 8vw, 84px);
+        line-height: 0.96;
+      }
+
+      h2 {
+        font-size: clamp(30px, 4vw, 54px);
+        line-height: 1.02;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 24px;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.55;
+      }
+
+      .lead {
+        margin-top: 18px;
+        font-size: clamp(18px, 2vw, 28px);
+        max-width: 18ch;
+        color: #2a2d31;
+      }
+
+      .muted {
+        color: var(--text-muted);
+      }
+
+      .hero-grid,
+      .split-grid,
+      .card-grid,
+      .timeline-grid,
+      .principles-grid {
+        display: grid;
+        gap: 20px;
+      }
+
+      .hero-grid {
+        grid-template-columns: 1.3fr 0.85fr;
+        align-items: end;
+        margin-top: 28px;
+      }
+
+      .split-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 28px;
+      }
+
+      .card-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 28px;
+      }
+
+      .principles-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 28px;
+      }
+
+      .timeline-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 28px;
+      }
+
+      .panel,
+      .stat,
+      .callout,
+      .phase-card,
+      .timeline-card,
+      .example-card {
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: var(--surface);
+      }
+
+      .panel,
+      .callout,
+      .phase-card,
+      .timeline-card,
+      .example-card {
+        padding: 22px;
+      }
+
+      .stat {
+        padding: 22px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fcfc 100%);
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 40px;
+        line-height: 1;
+        margin-bottom: 8px;
+      }
+
+      .stat.accent-orange strong {
+        color: var(--brand-primary);
+      }
+
+      .stat.accent-turquoise strong {
+        color: var(--brand-secondary);
+      }
+
+      .stat.accent-dark strong {
+        color: var(--brand-black);
+      }
+
+      ul,
+      ol {
+        margin: 16px 0 0;
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 8px 0;
+        line-height: 1.45;
+      }
+
+      .big-quote {
+        margin-top: 28px;
+        padding: 28px 30px;
+        border-left: 6px solid var(--brand-primary);
+        background: #fff7f1;
+        border-radius: 20px;
+        font-size: clamp(24px, 3vw, 36px);
+        line-height: 1.18;
+        font-family: "Source Serif Pro", Georgia, serif;
+      }
+
+      .phase-card {
+        position: relative;
+        overflow: hidden;
+        min-height: 220px;
+      }
+
+      .phase-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 8px;
+      }
+
+      .phase-card.specify::before {
+        background: var(--brand-primary);
+      }
+
+      .phase-card.plan::before {
+        background: var(--brand-secondary);
+      }
+
+      .phase-card.task::before {
+        background: #3d4550;
+      }
+
+      .phase-card.implement::before {
+        background: #00a37a;
+      }
+
+      .phase-card .phase-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--surface-muted);
+        margin-bottom: 14px;
+        font-weight: 700;
+      }
+
+      .timeline-card {
+        background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%);
+      }
+
+      .timeline-card .time {
+        display: inline-block;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 10px;
+      }
+
+      .comparison {
+        margin-top: 28px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        overflow: hidden;
+      }
+
+      .comparison-row {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr 1.1fr;
+      }
+
+      .comparison-row > div {
+        padding: 18px 20px;
+        border-top: 1px solid var(--border);
+      }
+
+      .comparison-row:first-child > div {
+        border-top: 0;
+        font-weight: 700;
+        background: var(--surface-muted);
+      }
+
+      .comparison-row > div:nth-child(2) {
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .pill {
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: #eef9fb;
+        color: #0c6670;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .pill.orange {
+        background: #fff0e3;
+        color: #a24d08;
+      }
+
+      .example-card {
+        margin-top: 26px;
+      }
+
+      .example-card code,
+      .code-block code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 14px;
+      }
+
+      .code-block {
+        margin-top: 18px;
+        padding: 18px 20px;
+        background: #111317;
+        color: #eff2f6;
+        border-radius: 18px;
+        overflow: auto;
+      }
+
+      .deck-controls {
+        position: fixed;
+        left: 50%;
+        bottom: 20px;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: rgba(23, 23, 26, 0.92);
+        color: white;
+        padding: 12px 14px;
+        border-radius: 999px;
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.25);
+        z-index: 10;
+      }
+
+      .deck-button {
+        border: 0;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: white;
+        color: var(--brand-black);
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .deck-button:disabled {
+        cursor: default;
+        opacity: 0.4;
+      }
+
+      .deck-counter {
+        min-width: 88px;
+        text-align: center;
+        font-weight: 700;
+      }
+
+      .deck-dots {
+        display: flex;
+        gap: 8px;
+      }
+
+      .deck-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.28);
+      }
+
+      .deck-dot.is-active {
+        background: var(--brand-primary);
+      }
+
+      .highlight {
+        color: var(--brand-primary);
+      }
+
+      .sub-highlight {
+        color: var(--brand-secondary);
+      }
+
+      .slide-footer-note {
+        margin-top: 22px;
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+
+      @media (max-width: 980px) {
+        body {
+          overflow: auto;
+        }
+
+        .slides-frame {
+          overflow: visible;
+        }
+
+        .slides-track {
+          display: block;
+          transform: none !important;
+        }
+
+        .slide {
+          width: auto;
+          min-height: auto;
+          padding: 18px 16px 24px;
+        }
+
+        .slide:not(.is-active) {
+          display: none;
+        }
+
+        .slide-inner {
+          padding: 28px 22px;
+        }
+
+        .hero-grid,
+        .split-grid,
+        .card-grid,
+        .timeline-grid,
+        .principles-grid,
+        .comparison-row {
+          grid-template-columns: 1fr;
+        }
+
+        .comparison-row > div:nth-child(2) {
+          border-left: 0;
+          border-right: 0;
+        }
+
+        .deck-topbar {
+          padding: 14px 16px;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .deck-brand img {
+          width: 150px;
+        }
+
+        .deck-controls {
+          left: 16px;
+          right: 16px;
+          transform: none;
+          justify-content: space-between;
+        }
+      }
+
+      @media print {
+        body {
+          overflow: visible;
+          background: white;
+        }
+
+        .deck-controls,
+        .deck-topbar {
+          display: none;
+        }
+
+        .slides-track {
+          display: block;
+          transform: none !important;
+        }
+
+        .slide {
+          page-break-after: always;
+          padding: 0;
+        }
+
+        .slide-inner {
+          box-shadow: none;
+          border: 0;
+          border-radius: 0;
+          width: 100%;
+          min-height: 100vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="deck-shell">
+      <header class="deck-topbar">
+        <div class="deck-brand">
+          <img src="./assets/logo-light.svg" alt="Secret Escapes" />
+          <div class="deck-brand-copy">
+            <small>Presentation</small>
+            <strong>Spec-Based Development and the New SDLC</strong>
+          </div>
+        </div>
+        <div class="deck-meta">
+          <span class="deck-stage">From booking case study to delivery model</span>
+          <span>Use ← → keys</span>
+        </div>
+      </header>
+
+      <main class="slides-frame">
+        <div class="slides-track" id="slidesTrack">
+          <section class="slide is-active">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 1</p>
+              <h1>
+                The SDLC is changing.<br />
+                <span class="highlight">Specs are becoming executable.</span>
+              </h1>
+              <div class="hero-grid">
+                <div>
+                  <p class="lead">
+                    Modern delivery is shifting from “write code from tickets” to “turn rigorously specified systems into validated implementations.”
+                  </p>
+                  <div class="big-quote">
+                    The bottleneck is no longer only coding speed. It is the clarity, completeness, and operational quality of the spec.
+                  </div>
+                </div>
+                <div class="split-grid" style="margin-top: 0;">
+                  <div class="stat accent-orange">
+                    <strong>4</strong>
+                    <span>Core phases: Specify, Plan, Task, Implement</span>
+                  </div>
+                  <div class="stat accent-turquoise">
+                    <strong>1</strong>
+                    <span>Canonical contract shared by humans, models, and systems</span>
+                  </div>
+                  <div class="stat accent-dark">
+                    <strong>0</strong>
+                    <span>Value in ambiguous “fill in the blanks” product specs</span>
+                  </div>
+                  <div class="stat accent-orange">
+                    <strong>∞</strong>
+                    <span>Need for validation, architecture judgment, and iteration</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 2</p>
+              <h2>Why the traditional SDLC is under pressure</h2>
+              <div class="comparison">
+                <div class="comparison-row">
+                  <div>Dimension</div>
+                  <div>Traditional SDLC</div>
+                  <div>AI-assisted delivery</div>
+                </div>
+                <div class="comparison-row">
+                  <div>Primary artifact</div>
+                  <div>Ticket, PRD, wireframe, code</div>
+                  <div>Specification as executable contract</div>
+                </div>
+                <div class="comparison-row">
+                  <div>Main bottleneck</div>
+                  <div>Implementation throughput</div>
+                  <div>Spec clarity and state correctness</div>
+                </div>
+                <div class="comparison-row">
+                  <div>Failure mode</div>
+                  <div>Developer interpretation drift</div>
+                  <div>Model hallucination or incomplete constraints</div>
+                </div>
+                <div class="comparison-row">
+                  <div>Human role</div>
+                  <div>Translate intent into code</div>
+                  <div>Define contracts, edge cases, and validation</div>
+                </div>
+                <div class="comparison-row">
+                  <div>Quality control</div>
+                  <div>Mostly after implementation</div>
+                  <div>Built into the spec, then verified in code</div>
+                </div>
+              </div>
+              <div class="pill-row">
+                <span class="pill">Ambiguity compounds faster with AI</span>
+                <span class="pill orange">Good specs compress implementation time</span>
+                <span class="pill">Validation becomes a first-class phase</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 3</p>
+              <h2>Spec-based development in one sentence</h2>
+              <div class="big-quote">
+                Define the system precisely enough that code generation, human review, validation, and future reimplementation all operate against the same source of truth.
+              </div>
+              <div class="split-grid">
+                <div class="panel">
+                  <h3>What the spec is</h3>
+                  <ul>
+                    <li>A behavioral contract</li>
+                    <li>An architecture guide</li>
+                    <li>A decomposition of work</li>
+                    <li>A set of validation invariants</li>
+                  </ul>
+                </div>
+                <div class="panel">
+                  <h3>What the spec is not</h3>
+                  <ul>
+                    <li>A vague vision statement</li>
+                    <li>A backlog placeholder</li>
+                    <li>A loose prompt for a model to improvise from</li>
+                    <li>A post-hoc description of already written code</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 4</p>
+              <h2>The four-phase lifecycle</h2>
+              <div class="timeline-grid">
+                <div class="phase-card specify">
+                  <div class="phase-number">1</div>
+                  <h3>Specify</h3>
+                  <p>Define user-facing behavior, business rules, invariants, acceptance criteria, and runtime constraints.</p>
+                </div>
+                <div class="phase-card plan">
+                  <div class="phase-number">2</div>
+                  <h3>Plan</h3>
+                  <p>Translate intent into architecture, data flow, state ownership, orchestration, and failure handling.</p>
+                </div>
+                <div class="phase-card task">
+                  <div class="phase-number">3</div>
+                  <h3>Task</h3>
+                  <p>Break the plan into atomic, parallelizable, testable work units that an engineer or model can execute.</p>
+                </div>
+                <div class="phase-card implement">
+                  <div class="phase-number">4</div>
+                  <h3>Implement</h3>
+                  <p>Generate or write the code, then validate it against the spec with builds, tests, and runtime checks.</p>
+                </div>
+              </div>
+              <p class="slide-footer-note">This is the structure now used across the booking specs: product, API, design, multi-step, and conversational.</p>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 5</p>
+              <h2>Case study: the booking journey forced the spec to mature</h2>
+              <div class="card-grid">
+                <div class="timeline-card">
+                  <span class="time">Early assumption</span>
+                  <h3>“Just build the flow”</h3>
+                  <p class="muted">Initial implementation pressure makes teams accept under-specified behavior.</p>
+                </div>
+                <div class="timeline-card">
+                  <span class="time">Reality</span>
+                  <h3>Backend statefulness surfaced everywhere</h3>
+                  <p class="muted">Selections, defaults, repricing, polling, restore, and session continuity all mattered.</p>
+                </div>
+                <div class="timeline-card">
+                  <span class="time">Learning</span>
+                  <h3>The spec had to become operational</h3>
+                  <p class="muted">Not “what the UI looks like”, but exactly how payload, selection, and validation work.</p>
+                </div>
+              </div>
+              <div class="example-card">
+                <h3>Key shift</h3>
+                <p>
+                  The useful artifact stopped being “a design plus some tickets” and became a family of coordinated specs:
+                  <span class="sub-highlight">product flow, API contract, design system, multi-step implementation contract, and conversational implementation contract.</span>
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 6</p>
+              <h2>What we learned from the booking implementation</h2>
+              <div class="principles-grid">
+                <div class="panel">
+                  <h3>1. The payload is the product</h3>
+                  <p class="muted">The evolving booking payload is the real state machine. UI is just a projection of it.</p>
+                </div>
+                <div class="panel">
+                  <h3>2. “Selected” matters</h3>
+                  <p class="muted">Backend-selected choices must become the default everywhere. Array order is not a contract.</p>
+                </div>
+                <div class="panel">
+                  <h3>3. Receipt is the pricing truth</h3>
+                  <p class="muted">Selections are not valid until repriced successfully. UI optimism must be constrained.</p>
+                </div>
+                <div class="panel">
+                  <h3>4. New stay = new decision tree</h3>
+                  <p class="muted">Changing the calendar selection clears downstream products and restarts the journey.</p>
+                </div>
+                <div class="panel">
+                  <h3>5. Async flows need contracts</h3>
+                  <p class="muted">Flights and cars required explicit task-group polling, statuses, retries, and validation.</p>
+                </div>
+                <div class="panel">
+                  <h3>6. Restore is part of the feature</h3>
+                  <p class="muted">Session headers, URL snapshots, and rehydration are product behavior, not implementation detail.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 7</p>
+              <h2>How the specs evolved</h2>
+              <div class="split-grid">
+                <div class="panel">
+                  <h3>Before</h3>
+                  <ul>
+                    <li>“Use the real API”</li>
+                    <li>“Build a multi-step booking UI”</li>
+                    <li>“Make it look like the brand”</li>
+                    <li>“Show receipt updates”</li>
+                  </ul>
+                </div>
+                <div class="panel">
+                  <h3>After</h3>
+                  <ul>
+                    <li>Two-stage calendar bootstrap</li>
+                    <li>Session header persisted across restore</li>
+                    <li>Backend-selected defaults generalized across panels</li>
+                    <li>New stay clears downstream products</li>
+                    <li>Receipt errors block progression</li>
+                    <li>Checkout uses real <code>createOrder</code> redirect flow</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="code-block">
+                <code>
+                  Specify → explicit user-facing behavior<br />
+                  Plan → data flow and ownership<br />
+                  Task → atomic build units<br />
+                  Implement → runtime and validation rules
+                </code>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 8</p>
+              <h2>Specs now need to be model-readable</h2>
+              <div class="card-grid">
+                <div class="panel">
+                  <h3>Deterministic language</h3>
+                  <p class="muted">Say “must”, “must not”, and “fallback order”, not “ideally” or “roughly”.</p>
+                </div>
+                <div class="panel">
+                  <h3>Operational invariants</h3>
+                  <p class="muted">State what happens on failure, reload, retries, and conflicting choices.</p>
+                </div>
+                <div class="panel">
+                  <h3>Canonical ownership</h3>
+                  <p class="muted">Define what the backend owns, what the frontend owns, and what the model is allowed to do.</p>
+                </div>
+              </div>
+              <div class="big-quote">
+                A good AI-era spec does not just describe the happy path. It constrains interpretation.
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 9</p>
+              <h2>The new role of engineering</h2>
+              <div class="split-grid">
+                <div class="panel">
+                  <h3>Less time on</h3>
+                  <ul>
+                    <li>boilerplate generation</li>
+                    <li>repeating known UI patterns</li>
+                    <li>mechanical wiring once contracts are clear</li>
+                  </ul>
+                </div>
+                <div class="panel">
+                  <h3>More time on</h3>
+                  <ul>
+                    <li>state design</li>
+                    <li>failure modeling</li>
+                    <li>API contract rigor</li>
+                    <li>validation boundaries</li>
+                    <li>quality of the executable spec</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="example-card">
+                <h3>Practical reframing</h3>
+                <p>The engineer becomes the author of constraints, invariants, and verification loops, not just the author of source code.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 10</p>
+              <h2>What changes when the interface is conversational</h2>
+              <div class="split-grid">
+                <div class="panel">
+                  <h3>What stays the same</h3>
+                  <ul>
+                    <li>Same booking journey</li>
+                    <li>Same API contract</li>
+                    <li>Same payload rules</li>
+                    <li>Same receipt validation</li>
+                    <li>Same async polling flows</li>
+                  </ul>
+                </div>
+                <div class="panel">
+                  <h3>What changes</h3>
+                  <ul>
+                    <li>Selection becomes turns</li>
+                    <li>Validation becomes explicit action execution</li>
+                    <li>The OpenAI layer interprets intent, not truth</li>
+                    <li>The thread becomes part of the state system</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="code-block">
+                <code>
+                  user text → OpenAI action proposal → app validation → booking flow action → receipt refresh → next assistant turn
+                </code>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 11</p>
+              <h2>Recommended working model for teams</h2>
+              <div class="timeline-grid">
+                <div class="timeline-card">
+                  <span class="time">Step 1</span>
+                  <h3>Write the spec family first</h3>
+                  <p class="muted">Product, API, design, runtime mode, and validation constraints.</p>
+                </div>
+                <div class="timeline-card">
+                  <span class="time">Step 2</span>
+                  <h3>Implement in vertical slices</h3>
+                  <p class="muted">But wire the real backend early so the spec gets corrected by reality.</p>
+                </div>
+                <div class="timeline-card">
+                  <span class="time">Step 3</span>
+                  <h3>Feed learnings back into the spec</h3>
+                  <p class="muted">Every runtime discovery becomes a sharpened contract.</p>
+                </div>
+                <div class="timeline-card">
+                  <span class="time">Step 4</span>
+                  <h3>Treat the spec as reusable capital</h3>
+                  <p class="muted">The next model, team, or interface mode should be able to rebuild from it.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="slide">
+            <div class="slide-inner">
+              <p class="eyebrow">Slide 12</p>
+              <h2>Bottom line</h2>
+              <div class="big-quote">
+                In the AI era, the best teams will not just write better code. They will write better specifications that code, models, and humans can all execute against.
+              </div>
+              <div class="split-grid">
+                <div class="panel">
+                  <h3>For leadership</h3>
+                  <p class="muted">Invest in spec quality, not only implementation throughput.</p>
+                </div>
+                <div class="panel">
+                  <h3>For product and engineering</h3>
+                  <p class="muted">Turn behavior, contracts, and edge cases into explicit shared artifacts.</p>
+                </div>
+              </div>
+              <div class="pill-row">
+                <span class="pill orange">Specify precisely</span>
+                <span class="pill">Plan operationally</span>
+                <span class="pill">Task atomically</span>
+                <span class="pill orange">Implement and validate</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="deck-controls">
+      <button class="deck-button" id="prevButton" type="button" aria-label="Previous slide">←</button>
+      <div class="deck-counter" id="deckCounter">1 / 12</div>
+      <div class="deck-dots" id="deckDots"></div>
+      <button class="deck-button" id="nextButton" type="button" aria-label="Next slide">→</button>
+    </div>
+
+    <script>
+      const slides = Array.from(document.querySelectorAll(".slide"));
+      const track = document.getElementById("slidesTrack");
+      const counter = document.getElementById("deckCounter");
+      const prevButton = document.getElementById("prevButton");
+      const nextButton = document.getElementById("nextButton");
+      const dotsRoot = document.getElementById("deckDots");
+
+      let currentIndex = 0;
+
+      slides.forEach((_, index) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = "deck-dot";
+        dot.setAttribute("aria-label", `Go to slide ${index + 1}`);
+        dot.addEventListener("click", () => goTo(index));
+        dotsRoot.appendChild(dot);
+      });
+
+      function render() {
+        track.style.transform = `translateX(-${currentIndex * 100}%)`;
+        counter.textContent = `${currentIndex + 1} / ${slides.length}`;
+        prevButton.disabled = currentIndex === 0;
+        nextButton.disabled = currentIndex === slides.length - 1;
+
+        slides.forEach((slide, index) => {
+          slide.classList.toggle("is-active", index === currentIndex);
+        });
+
+        Array.from(dotsRoot.children).forEach((dot, index) => {
+          dot.classList.toggle("is-active", index === currentIndex);
+        });
+      }
+
+      function goTo(index) {
+        currentIndex = Math.max(0, Math.min(slides.length - 1, index));
+        render();
+      }
+
+      prevButton.addEventListener("click", () => goTo(currentIndex - 1));
+      nextButton.addEventListener("click", () => goTo(currentIndex + 1));
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+          event.preventDefault();
+          goTo(currentIndex + 1);
+        }
+        if (event.key === "ArrowLeft" || event.key === "PageUp") {
+          event.preventDefault();
+          goTo(currentIndex - 1);
+        }
+        if (event.key === "Home") {
+          event.preventDefault();
+          goTo(0);
+        }
+        if (event.key === "End") {
+          event.preventDefault();
+          goTo(slides.length - 1);
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
