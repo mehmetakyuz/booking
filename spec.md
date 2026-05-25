@@ -89,6 +89,7 @@ The booking flow is composed of these user-facing steps:
 
 The spec is only satisfied when:
 
+- a `.nvmrc` pinning the runtime version exists at the implementation folder root
 - the app builds successfully with `npm run build`
 - all major step flows are wired to the real API
 - the summary / receipt updates from live API data
@@ -103,8 +104,10 @@ The spec is only satisfied when:
 
 ### Technical architecture
 
-- Framework: Next.js App Router
-- Language: TypeScript
+- Runtime: Node.js 22 (LTS), pinned via a `.nvmrc` file at the implementation folder root so local and CI environments resolve the same version
+- Framework: Next.js 15 (App Router)
+- Language: TypeScript 5.8
+- UI library: React 19
 - Data fetching: native `fetch`, GraphQL over HTTP
 - GraphQL client: thin custom wrapper, no Apollo
 - UI state: React context + reducer-style state transitions
@@ -167,7 +170,7 @@ Before coding begins, the implementation agent should translate this strategy in
 
 Another implementation agent should treat the work as these atomic workstreams:
 
-1. Create Next.js app structure under `gpt-5-codex-multistep-ui-implementation`
+1. Create Next.js app structure under `gpt-5-codex-multistep-ui-implementation`, including the `.nvmrc` runtime pin
 2. Add environment and GraphQL client plumbing
 3. Implement server boot for `offerId`
 4. Implement session header generation and forwarding
