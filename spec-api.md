@@ -56,6 +56,10 @@ Frontend rules:
 
 Validation check: a 3-night European package receipt total should render in the low thousands of pounds (e.g. `£1,563`), not hundreds of thousands. If you see `£156,300` on screen, the formatter is missing a divide-by-100.
 
+#### Price fields are scalar integers
+
+`Price` is a GraphQL **scalar**, not an object. Select price-like fields directly (`price`, `oldPrice`, `totalPrice`, `perPersonPrice`, `amount`, …). Attempting a subfield selection such as `price { ... }` is a query error and the API responds with HTTP 400. The same applies to `Duration` and other custom scalars — they are selected as leaf fields.
+
 ### Environment
 
 | Variable | Value |
@@ -393,8 +397,8 @@ export async function gql<T>(
 Use these fields at minimum:
 
 - title and short title
-- summary image
-- location data
+- summary image (`image`) and gallery (`gallery`); `Image.url` is parameterized — request a sized URL, e.g. `image { url(w: 1280) }`, rather than a bare `url`
+- location: there is no single scalar location field on `Offer`; use `destinationText.location` for the summary location string
 - feature flags:
   - `hasFlights`
   - `hasCars`
@@ -404,7 +408,11 @@ Use these fields at minimum:
   - `isRoundtrip`
 - occupancy rules
 - payment help and terms metadata
-- information lists for summary modals
+- information content for the summary modals:
+  - `includedListWithDescriptions` returns `[{ name, description }]` (objects) — used for the "what's included" modal
+  - `excludedList` returns `[String]` (plain strings, **not** objects) — used for the "what's excluded" modal
+  - `informationList` returns `[{ id, label, value }]` — used for the "trip information" modal
+  - note the receipt's own `excluded` field is a different shape (`[{ title, price }]`); do not model these as one type
 
 ### Calendar query
 
@@ -478,6 +486,20 @@ It must at minimum fetch:
 - `errors`
 - `itinerary.events.components`
 
+#### Receipt line types
+
+`lines` is an interface (`ReceiptLineInterface`) and must be queried with
+`__typename` plus inline fragments:
+
+- `ReceiptLine` — `label` and `format` only (descriptive/sibling line)
+- `ReceiptLineAmount` — adds `amount` and `perPerson`
+- `ReceiptLineText` — adds `text`
+
+Render `ReceiptLineAmount` rows as priced lines; render `ReceiptLine` /
+`ReceiptLineText` rows as descriptive siblings. The `format` field is a
+`LineFormatEnum` (e.g. `IMPORTANT`, `SIBLING`, `LINEBREAK`) — treat unknown
+values as plain.
+
 #### Receipt itinerary typed components
 
 Retain and normalize typed itinerary component data instead of flattening it.
@@ -509,7 +531,15 @@ Schema note:
 
 #### Itinerary component types
 
-The itinerary `components` array uses `__typename` to distinguish types (e.g., `ItineraryFlightComponent`, `ItineraryAccommodationComponent`). The normalizer should extract a simple `type` string (e.g., `"flight"`, `"accommodation"`) for the UI layer. **The raw `__typename` value must never be rendered to the user.** The UI must map types to SVG icons — see spec-design.md for the icon mapping.
+The itinerary `components` array implements `ItineraryComponentInterface` and uses `__typename` to distinguish concrete types. The full set is:
+
+- `ItineraryAccommodationComponent` → `"accommodation"`
+- `ItineraryFlightComponent` → `"flight"`
+- `ItineraryCarComponent` → `"car"`
+- `ItineraryLeisureComponent` → `"activity"`
+- `ItineraryTransferComponent` → `"transfer"`
+
+The normalizer should extract a simple `type` string for the UI layer. **The raw `__typename` value must never be rendered to the user.** The UI must map types to SVG icons — see spec-design.md for the icon mapping. Handle all five types; do not assume only flight/accommodation/car appear.
 
 #### Receipt list-key note
 
@@ -519,17 +549,33 @@ The itinerary `components` array uses `__typename` to distinguish types (e.g., `
 #### Instalment presentation note
 
 - The receipt returns `instalmentsPayments` as a list of schedules, not one flat schedule
+- The full list of schedules is returned on every receipt response regardless of the `numOfInstalments` value sent; the UI picks the relevant one by index
 - Each top-level entry corresponds to an instalment-plan option in order:
-  - index `0` = pay in full
+  - index `0` = pay in full (one payment)
   - index `1` = 2 instalments
   - and so on
-- The UI must select the schedule that matches the currently selected `numOfInstalments`
+- The selected schedule index is `numOfInstalments - 1`: `numOfInstalments: 1` selects index `0`, `numOfInstalments: 2` selects index `1`, etc. Guard against out-of-range indices.
 - Within the selected schedule:
   - the first row is the immediate due-now payment
   - the remaining rows are due-later payments
 - Do not flatten all schedules together
 - Do not derive the due-now amount from `receipt.totalPrice - sum(...)` when the API already provides the selected schedule rows
 - When `numOfInstalments` changes, reprice the receipt and refresh the displayed schedule for that selected plan
+
+### Product option queries share one `dynamicPackage` root
+
+Accommodation, leisure, flight, and car options are **sub-fields of a single
+`dynamicPackage(...)` query**, not separate top-level operations:
+
+- `dynamicPackage { accomodations { ... } }`
+- `dynamicPackage { leisures { ... } }`
+- `dynamicPackage { flights { ... } }`
+- `dynamicPackage { cars { ... } }`
+
+`dynamicPackage(...)` takes the singular-form arguments (see the calendar
+argument-type rule above). The leisure-step baseline price is
+`dynamicPackage.price` on that same response. Each option object exposes a
+`selected: Boolean` flag used for the backend-selected default rule.
 
 ### Accommodation query
 
@@ -548,6 +594,11 @@ When fetching leisure options:
 - strip existing leisure `L:` products from the request
 - retain the returned `dynamicPackage.price` as the leisure baseline price for delta calculations
 
+Leisure unit field notes:
+
+- `units[].duration` is a `Duration` scalar in **ISO 8601 duration** format (e.g. `PT2H`, `PT6H30M`, `PT45M`), not a minute count. Parse it before rendering human-readable text like `2 hours 30 mins`. It may also be `null`.
+- `units[].groupType` is a `LeisureTourTypeEnum` (`GROUP_TOUR`, `INDIVIDUAL`) and may be `null`; map it through an explicit label table (see the enum-rendering rule below).
+
 Leisure grouping rules:
 
 - included leisure variations are grouped by parent leisure product
@@ -561,6 +612,36 @@ Rendering note:
 - any enum-like API value that is shown to users should be rendered through an explicit UI mapping table
 - do not rely on generic text transformations like lowercasing, replacing underscores, or title-casing raw enum strings
 - if a value is intended to be user-facing, define and maintain a deliberate label map for it
+
+### Async task-group contract
+
+Flights and cars are produced by asynchronous backend task groups, driven by two
+operations:
+
+- `startTaskGroup(tasks: [TaskInput]!) { taskGroupId started tasks { key reason } }`
+- `pollTaskGroup(taskGroupId: ID!) { status }`
+
+where:
+
+- `TaskInput { dynamicPackage: DynamicPackageInput, key: ID }` — the search type
+  string goes in `key`, and the current booking variables (the same singular-form
+  fields the `dynamicPackage` query takes) go in `dynamicPackage`
+- known `key` values are `FLIGHT_SEARCH`, `FLIGHT_PRICE_VALIDATION`, and `CAR_SEARCH`
+- `status` is a `TaskStatusEnum` with values `PROCESSING`, `FINISHED`, `FAILED`
+
+Flow:
+
+1. call `startTaskGroup` with the relevant `key` and capture `taskGroupId`
+2. poll `pollTaskGroup(taskGroupId)` until `status` is `FINISHED`
+3. treat `FAILED`, or a poll loop that exceeds a sensible timeout, as a no-results
+   outcome for the current stay (see the recovery rules below)
+4. once finished, read results from the normal `dynamicPackage { flights }` /
+   `dynamicPackage { cars }` query — the task group populates the backend session
+   that those queries read from
+
+The result objects themselves are **not** returned by `startTaskGroup` /
+`pollTaskGroup`; those only orchestrate the async work. Always fetch results via
+`dynamicPackage` afterwards.
 
 ### Flight polling pattern
 
@@ -600,9 +681,10 @@ Checkout submission must use a real `createOrder` mutation.
 
 It should include at minimum:
 
-- `offerId`
-- `people`
-- `totalPrice`
+- `offerId` (`ID!`, required)
+- `customer` (`Int!`, required) — the lead-passenger index into `people`, typically `0`
+- `people` (`[PersonInput]!`, required)
+- `totalPrice` (`Price!`, required)
 - `date`
 - `paymentMethod`
 - `nights`
@@ -616,6 +698,12 @@ It should include at minimum:
 - `properties`
 - `deferred`
 - `priceSeen`
+
+Response shape:
+
+- `createOrder` returns a `result` wrapper, not the order directly:
+  `createOrder { result { order { id token referenceId restoreUrl } paymentResult { continueUrl } errors { code field message } } }`
+- inspect `result.errors` and abort the redirect if it is non-empty
 
 Implementation rule:
 

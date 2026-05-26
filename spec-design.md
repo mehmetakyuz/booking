@@ -394,6 +394,9 @@ Component type indicators must use **inline SVG icons**, not text labels. Never 
 | `flight` | Airplane |
 | `car`, `carrental` | Car |
 | `activity`, `leisure` | Clock/activity |
+| `transfer` | Shuttle/transfer |
+
+The normalized `type` values map from these `__typename`s: `ItineraryAccommodationComponent` → `accommodation`, `ItineraryFlightComponent` → `flight`, `ItineraryCarComponent` → `car`, `ItineraryLeisureComponent` → `activity`, `ItineraryTransferComponent` → `transfer`. Provide a fallback icon for any unmapped type.
 
 The same timeline treatment applies to both:
 - The compact preview in the receipt sidebar (up to 3 events with "View full itinerary" link)
@@ -428,6 +431,7 @@ The same timeline treatment applies to both:
 
 - `facilities` in accommodation responses are objects like `{name, icon}` rather than strings on the accommodation query path. Preserve the backend `icon` token so facility iconography can map from stable backend values; use `.name` only for customer-facing text.
 - `itinerary` in receipt responses is `{events: [...]}`, not a flat array. Access `receipt.itinerary.events` in the normalizer.
+- `Image` exposes a parameterized `url(w, h, size, dpr)` field, not a bare string. Always request a sized URL (e.g. `image { url(w: 800) }`, `gallery { url(w: 1280) }`) so cards, galleries, and the summary header load appropriately sized assets.
 
 ### Visual validation checklist
 
