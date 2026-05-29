@@ -126,13 +126,18 @@ interface MultistepState {
 
 On `/offers/[offerId]`:
 
-1. fetch offer
-2. fetch initial calendar facets
-3. derive default airport and package group
-4. fetch aligned calendar
-5. build steps from offer meta
-6. render summary shell immediately
-7. wait for the first valid receipt after a stay is selected
+1. Fetch offer metadata
+2. Fetch initial calendar facets (no filters) to discover:
+   - available `packageTypes` → default to `EXCLUDING_FLIGHTS` or first available
+   - available `departureAirports` → default to first selected/available
+   - available `packageGroups` → default to first
+   - `nightsOptions` → if no `null` option present, default `nightsFilter` to `1`
+   - `minDate` → used to determine the initial calendar month
+3. Commit the derived defaults to the payload
+4. Fetch the first month of calendar dates (using the committed filters and the correct `nightsFilter`)
+5. Build steps from offer meta
+6. Render summary shell immediately
+7. Wait for the first valid receipt after a stay is selected
 
 ### Repricing model
 
@@ -144,6 +149,13 @@ The system has two repricing modes:
 2. Downstream option repricing
    - updates the relevant product family
    - keeps the existing stay selection
+
+### Product price semantics
+
+- Every product option's `price` (hotels, rooms, boards, activities, flights, cars) is the **resulting whole-package total** if that option were selected — it is not the standalone price of that product.
+- This is why option cards show a delta against the baseline option on top and the resulting package total beneath: the "total" is the package total, not the product's own cost.
+- Never relabel a product `price` as that product's own price (for example "Flight total", "Hotel price", "Car total"). Such labels are factually wrong and mislead the user.
+- The only standalone-priced values are explicitly itemised receipt lines and add-on extras that the backend returns with their own discrete price.
 
 ### Loading model
 
@@ -177,7 +189,7 @@ Implement the UI in these atomic work units:
 7. Build the flight step with async search flow
 8. Build the car step with async search and extras flow
 9. Build the checkout step
-10. Build modal system and itinerary modal
+10. Build modal system and the inline always-visible itinerary
 11. Build URL-state persistence and restore
 12. Add loading, error, and retry states
 13. Validate cross-step consistency and responsive behavior
@@ -261,8 +273,52 @@ This is the stay-definition step.
 - If the backend uses an empty-string package-group ID for an `All packages` option, treat that empty string as a valid selected option in the UI rather than as an unset value
 - If no package group is selected, omit it from API variables instead of sending an empty string
 - The length-of-stay selector must have a visible selected state after boot
+- On boot, inspect the calendar `nightsOptions` facet:
+  - If the API returns a `nights: null` option ("All nights"), default the nights filter to `null` (flexible mode)
+  - If the API returns **no** `nights: null` option, default the nights filter to `1`; never leave the filter unset on offers that require a specific nights value or the calendar API will return an error
+  - If the API returns an **empty** `nightsOptions` array, synthesise a 1–31 chip selector so the user can still pick a stay length; chips show night counts only (no prices); the default selection is `1`
 - If the API returns `All nights` / `nights: null` as the selected/default length filter, keep that chip selected while the user chooses a flexible start and checkout date
 - If the user selects a concrete nights chip, selecting a start date immediately implies the checkout date and must not require a second calendar click
+
+### Package types (hotel-only vs hotel + flight)
+
+The calendar returns a `packageTypes` facet that represents the highest-level booking distinction: whether the package includes flights or not. Each entry has a `name` (customer-facing) and a `type` enum value. The known values are:
+
+| `type` | `name` | Meaning |
+|---|---|---|
+| `INCLUDING_FLIGHTS` | Hotel + flights | Package includes flight; departure airport selector is active |
+| `EXCLUDING_FLIGHTS` | Hotel only | No flight component; departure airport selector is hidden |
+
+#### Rendering
+
+- Render `packageTypes` as selectable cards at the top of the Dates step, before the occupancy/airport row and before `packageGroups`
+- **Hide the facet entirely when only one type is returned** — there is nothing to choose between
+- Cards have no price (the type facet carries no price); render name only, with a type-specific icon (`Building2` for hotel-only, `PlaneTakeoff` for hotel + flights)
+- The selected type must show a visible selected state immediately — do not wait for the calendar re-fetch
+
+#### Behaviour and filtering
+
+The `packageTypes` facet is **read-only** — the API does not accept it as a filter argument. Filtering between hotel-only and hotel + flight is done entirely through `departureAirports`:
+
+| State | `departureAirports` value | Effect |
+|---|---|---|
+| Not yet set | `undefined` (omit from query) | API returns all availability |
+| Hotel only (`EXCLUDING_FLIGHTS`) | `[]` explicit empty array | API returns hotel-only dates |
+| Hotel + flight (`INCLUDING_FLIGHTS`) | `["LHR"]` specific airport code | API returns flight-inclusive dates for that airport |
+
+Never collapse `[]` to `undefined` — the empty array is a deliberate signal, not an absent value.
+
+On fresh boot, default to `EXCLUDING_FLIGHTS` when that type is present in the facets; fall back to the first returned type otherwise.
+
+When the user selects a package type, eagerly commit the airport state before the calendar re-fetches so dependent UI responds immediately:
+- `EXCLUDING_FLIGHTS` selected → set `departureAirports: []`, hide the departure airport selector
+- `INCLUDING_FLIGHTS` selected → clear `departureAirports` to `undefined` so the first calendar fetch runs without an airport filter and can return the full available airport list for reconciliation
+
+#### Airport reconciliation after a type switch
+
+After loading the calendar for the new package type:
+- `EXCLUDING_FLIGHTS`: commit `departureAirports: []`
+- `INCLUDING_FLIGHTS`: if the currently selected airport is absent from the new calendar's airport list (or `departureAirports` was cleared), promote the first selected or available airport, commit it, then re-fetch the calendar with that airport so dates are filtered correctly. The re-fetch must clear the month cache first because the previous month data was for a different airport.
 
 ### Calendar
 
@@ -275,13 +331,48 @@ This is the stay-definition step.
   - low-stock labels
   - helper labels like `Start` or `Check-out`
 
+#### Month-by-month loading
+
+The calendar fetches one month of date data at a time rather than all available dates in a single call. The `dateFrom`/`dateTo` range arguments on the calendar query control this.
+
+**Initial month selection on boot:**
+1. Fetch the unfiltered facets call first to obtain `globalMinDate`
+2. If `globalMinDate` is more than 30 days away from today, open on `globalMinDate`'s month; otherwise open on the current calendar month
+3. If a `selectedDate` is already in the payload (URL restore), open on that date's month regardless
+
+**Navigation:**
+- Prev/next arrows navigate one calendar month at a time
+- Before fetching, check an in-memory month cache (keyed by `YYYY-MM`)
+- Cache hit: update the displayed dates synchronously with no loading indicator
+- Cache miss: fetch the month, show a spinner overlay on the calendar grid only (do not disable the rest of the step), then populate the cache
+- Navigation bounds come from the API's `minDate` and `maxDate` fields on the calendar response; disable the prev arrow when the displayed month equals or precedes `minDate`'s month, and the next arrow when it equals or exceeds `maxDate`'s month
+- The calendar shell and navigation arrows must always render once a month is known — even when the current month has no available dates or a fetch failed. Show a "No dates available this month" note below the grid in that case so the user can navigate forward to find availability
+
+**Cache invalidation:**
+- Clear the entire month cache whenever any first-step filter changes (occupancy, airport, package type, package group, nights) — all cached dates are stale after a filter change
+- Also clear the cache before re-fetching the calendar after an airport-reconciliation step, because the previous month data was for a different airport
+
 ### Fixed nights flow
 
 When a concrete nights filter is selected:
 
-- selecting a date immediately reprices the receipt
+- selecting a date triggers the stay-commit sequence (see below), then reprices the receipt
 - a valid receipt response makes the stay selected
 - continue becomes available only when that stay is valid
+
+### Stay-commit sequence
+
+When any date selection finalises a stay (fixed-nights click, or flexible checkout-date click), the following steps happen in order before the receipt is called:
+
+1. Commit `selectedDate`, `nights`, and clear `products` to `[]`
+2. Set receipt loading immediately so the spinner appears during the next step
+3. For non-leisure-only offers, call `dynamicPackage` (accommodations) to get fresh product options with backend `selected` flags
+4. Walk the response: `selected` hotel → `selected` unit → `selected` board; commit the resolved `A:` product ID
+5. Call receipt with the pre-populated product — this ensures the receipt is priced against a real room/board from the first call
+
+**Why this matters:** the receipt API requires at least one `A:` product to price correctly. Without pre-selection the backend guesses a default, which may differ from the option the backend marks as `selected`. The Rooms step reads the pre-selected product and preserves it rather than re-deriving it.
+
+Leisure-only offers skip step 3–4 (no accommodation component) and go straight to the receipt.
 
 ### Flexible nights flow
 
@@ -465,13 +556,24 @@ Let the user choose a flight result after async search and validation.
 
 ### Flight details modal
 
-- Show full leg/segment breakdown
-- Include:
-  - route
-  - timestamps
-  - per-segment duration
-  - luggage details
-  - cabin context
+- Show a complete leg-by-leg, segment-by-segment breakdown — the modal must read as a full itinerary, not a thin summary
+- For each leg (outbound and inbound), show a leg header with:
+  - leg label / direction
+  - origin → destination route (city + airport code)
+  - total leg duration (departure of first segment to arrival of last segment)
+  - stop count (`Direct` or `N stop(s)`)
+- For each segment, show:
+  - operating airline logo and marketing airline name
+  - flight code (airline IATA + flight number)
+  - cabin class
+  - departure: time, airport (city + code), full date
+  - arrival: time, airport (city + code), full date, with a `+N` day-offset badge for overnight arrivals
+  - per-segment flight duration (computed from departure/arrival timestamps when no explicit field is provided)
+  - luggage details (checked allowance vs hand luggage only), falling back to leg-level allowance when the segment omits it
+  - operating-carrier note when the segment is operated by a different airline than the marketing airline
+- Between connecting segments, show a layover/connection row with the connection duration and the connection airport
+- Show any leg-level hand-luggage rules
+- Do not present a price in this modal labelled as the flight's own price. A flight result's `price` is the resulting whole-package total with that flight selected (see "Product price semantics"), not a standalone fare. The card already shows that total with its delta; repeating it here as a "Flight total" misleads users into thinking it is the flight-only cost. If a price anchor is wanted, reuse the card's delta + resulting-total treatment, not a bare total labelled as the flight price.
 
 ### Selection behavior
 
@@ -548,9 +650,8 @@ The summary is one unified component containing:
   - trip information
 - trip date block
 - integrated price lines
+- always-visible full itinerary
 - booking total
-- concise itinerary preview
-- button to open full itinerary modal
 - error banner when receipt has errors
 
 ### Date block
@@ -565,14 +666,15 @@ The summary is one unified component containing:
 - Total belongs at the bottom
 - Do not show a `pp` figure beside the bottom total
 
-### Itinerary preview and modal
+### Itinerary
 
-- Preview in the summary should use product-type icons
-- It must use specific activity names, not generic `Activity`
-- Full itinerary lives behind a button and modal
-- Modal should show a day-by-day timeline with typed icons for flights, hotels, cars, and activities
-- Accommodation items in the full itinerary modal should show explicit check-in and check-out dates when the backend provides them
-- Flight items in the full itinerary modal should avoid repeating the same route information across title, subtitle, and meta rows
+- The full day-by-day itinerary is always visible inline in the summary panel — it is not hidden behind a button or modal
+- Show a day-grouped timeline with typed icons for flights, hotels, cars, and activities
+- Use product-type icons and specific activity names, not generic `Activity`
+- Accommodation items should show explicit check-in and check-out dates when the backend provides them
+- Flight items should avoid repeating the same route information across title, subtitle, and meta rows
+- On desktop, when the itinerary is long, the timeline scrolls within the panel so the booking total stays reachable without scrolling the whole page; the sticky panel must never push the total out of view
+- In the mobile drawer the itinerary renders in full (the drawer itself scrolls)
 
 ### Summary exclusions
 
@@ -592,6 +694,11 @@ All detail modals in the journey should use one pattern:
 - consistent spacing
 - top-right `×` close affordance
 
+### Modal trigger links
+
+- The inline text links that open detail modals (`View hotel details`, `View flight details`, and similar) are left-aligned, sized to their own text, and read as inline links.
+- Watch the implementation trap: these triggers are `<button>` elements placed inside column flex containers (card content bodies), which by default stretch the button to full width and center its label. The link must shrink to its content and stay left-aligned (for example `align-self: flex-start` with left-aligned text), never appearing centered within the card.
+
 ## URL-state requirements
 
 - Encode journey state into the URL
@@ -609,5 +716,5 @@ The UI is complete only if:
 - room/activity/flight/car changes reprice receipt correctly
 - async loaders and retries work
 - step transitions feel immediate, with shared in-panel skeleton/loading treatments rather than ad hoc per-step busy labels
-- itinerary preview and modal show specific product details
+- the always-visible inline itinerary shows specific product details and keeps the total reachable
 - refresh restore works without a visible full-page reload caused by URL syncing

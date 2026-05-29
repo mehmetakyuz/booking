@@ -8,6 +8,7 @@ export interface UrlSnapshot {
   people: PersonInput[];
   groups: PersonGroupsInput[];
   departureAirports?: string[];
+  packageType?: string;
   packageGroup?: string;
   nights?: number | null;
   selectedDate?: string;
@@ -63,6 +64,7 @@ export function snapshotFromState(
     people: payload.people,
     groups: payload.groups,
     departureAirports: payload.departureAirports,
+    packageType: payload.packageType,
     packageGroup: payload.packageGroup,
     nights: payload.nights,
     selectedDate: payload.selectedDate,

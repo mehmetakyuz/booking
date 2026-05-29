@@ -70,20 +70,7 @@ function TimelineRow({ c }: { c: ItineraryComponent }) {
   );
 }
 
-// Compact preview (up to 3 components) for the summary sidebar.
-export function ItineraryPreview({ events }: { events: ItineraryEvent[] }) {
-  const components = events.flatMap((e) => e.components).slice(0, 3);
-  if (!components.length) return null;
-  return (
-    <div className="timeline timeline--preview">
-      {components.map((c, i) => (
-        <TimelineRow key={i} c={c} />
-      ))}
-    </div>
-  );
-}
-
-// Full day-grouped timeline for the modal.
+// Full day-grouped timeline shown inline in the summary panel.
 export function ItineraryFull({ events }: { events: ItineraryEvent[] }) {
   if (!events.length) return <p className="muted">No itinerary available yet.</p>;
   return (

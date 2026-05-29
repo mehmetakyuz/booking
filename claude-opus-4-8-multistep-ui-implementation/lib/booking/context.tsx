@@ -13,9 +13,10 @@ import {
   Accommodation,
   ActivityData,
   BookingPayload,
+  CalendarData,
+  CalendarDate,
   Car,
   CarExtra,
-  CalendarData,
   CheckoutMeta,
   Flight,
   OfferMeta,
@@ -37,7 +38,7 @@ import {
   snapshotFromState,
   writeSnapshotToUrl,
 } from "./url-state";
-import { addDays } from "./dates";
+import { addDays, monthDateRange, pickInitialMonth, todayString } from "./dates";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -54,8 +55,10 @@ interface State {
   hydrating: boolean;
 
   // dates
-  calendar: CalendarData | null;
-  calendarLoading: boolean;
+  calendar: CalendarData | null;        // facets + current month's dates
+  calendarLoading: boolean;             // true during filter-driven refetch
+  calendarMonth: string | null;         // currently displayed YYYY-MM
+  calendarMonthLoading: boolean;        // true while fetching a new month
   nightsFilter: number | null; // chip filter; null = "All nights"
   flexStartDate: string | null;
 
@@ -124,6 +127,8 @@ function initialState(offerId: string, sessionId: string): State {
     hydrating: false,
     calendar: null,
     calendarLoading: false,
+    calendarMonth: null,
+    calendarMonthLoading: false,
     nightsFilter: null,
     flexStartDate: null,
     receipt: null,
@@ -151,10 +156,12 @@ export interface BookingContextValue {
   // dates
   setOccupancy: (adults: number, childrenAges: number[]) => Promise<void>;
   setAirport: (iata: string) => Promise<void>;
+  setPackageType: (type: string) => Promise<void>;
   setPackageGroup: (id: string) => Promise<void>;
   setNightsFilter: (n: number | null) => Promise<void>;
   selectDate: (date: string) => Promise<void>;
   clearFlexSelection: () => void;
+  navigateCalendarMonth: (yearMonth: string) => Promise<void>;
   // navigation
   goToStep: (id: StepId) => void;
   continueFrom: (id: StepId) => void;
@@ -202,6 +209,8 @@ export function BookingProvider({
   const stateRef = useRef(state);
   stateRef.current = state;
   const payloadRef = useRef<BookingPayload>(state.payload);
+  // Per-month date cache. Keyed by YYYY-MM. Cleared on every filter change.
+  const calendarCacheRef = useRef<Map<string, CalendarDate[]>>(new Map());
 
   const patch = useCallback(
     (p: Partial<State>) => dispatch({ type: "patch", patch: p }),
@@ -294,30 +303,137 @@ export function BookingProvider({
   }, [reprice, handleDownstreamInvalid]);
 
   // ---- calendar ----------------------------------------------------------
+  // Fetches facets (airports, packageGroups, etc.) plus the dates for a single
+  // month, using a per-session in-memory cache for the date payloads.
+  //
+  // minDateHint — when provided (e.g. from the boot's pre-flight facets call)
+  // the internal facets sub-call is skipped and the first API call goes
+  // straight to the month; the month response itself supplies the facets.
   const loadCalendar = useCallback(
-    async (nightsFilter: number | null) => {
+    async (
+      nightsFilter: number | null,
+      minDateHint?: string | null,
+    ): Promise<CalendarData | null> => {
       patch({ calendarLoading: true });
+      // Track startMonth outside the try so the catch can still set calendarMonth
+      // and render the calendar shell with navigation even when a fetch fails.
+      let startMonth: string | null = null;
       try {
-        const calendar = await api.fetchCalendar(
-          payloadRef.current,
-          nightsFilter,
-          undefined,
-          sid(),
-        );
-        patch({ calendar, calendarLoading: false });
-        return calendar;
+        let facets: CalendarData | null = null;
+        let minDate: string | null = minDateHint ?? null;
+
+        if (minDate == null) {
+          // Fetch facets first to discover minDate and airport availability.
+          facets = await api.fetchCalendar(
+            payloadRef.current,
+            nightsFilter,
+            undefined,
+            sid(),
+          );
+          minDate = facets.minDate;
+          // Auto-correct: if the offer has no flexible-nights option and we are
+          // still on the default null filter, switch to 1 night so the month
+          // fetch receives a valid nights argument.
+          const hasFlexible = facets.nightsOptions.some((n) => n.nights === null);
+          if (!hasFlexible && nightsFilter === null) {
+            nightsFilter = 1;
+            patch({ nightsFilter: 1 });
+          }
+        }
+
+        startMonth = pickInitialMonth(minDate, payloadRef.current.selectedDate);
+
+        let monthDates = calendarCacheRef.current.get(startMonth);
+        if (!monthDates) {
+          const monthData = await api.fetchCalendar(
+            payloadRef.current,
+            nightsFilter,
+            monthDateRange(startMonth),
+            sid(),
+          );
+          monthDates = monthData.dates;
+          calendarCacheRef.current.set(startMonth, monthDates);
+          // When minDateHint was provided we skipped the facets call; use the
+          // month response for facets instead.
+          if (!facets) facets = monthData;
+        }
+
+        // Edge case: minDateHint provided AND the month was already cached —
+        // we have dates but no facets. Fetch facets now.
+        if (!facets) {
+          facets = await api.fetchCalendar(
+            payloadRef.current,
+            nightsFilter,
+            undefined,
+            sid(),
+          );
+        }
+
+        patch({
+          calendar: { ...facets, dates: monthDates },
+          calendarLoading: false,
+          calendarMonth: startMonth,
+        });
+        return facets;
       } catch {
-        patch({ calendarLoading: false });
+        // Always set calendarMonth so the calendar shell and navigation render.
+        // The user can navigate to future months that may have availability.
+        patch({
+          calendarLoading: false,
+          calendarMonth:
+            startMonth ?? pickInitialMonth(minDateHint ?? null, payloadRef.current.selectedDate),
+        });
         return null;
       }
     },
     [patch],
   );
 
-  // After a first-step filter change: clear downstream + date, reload calendar.
+  // Navigate to a different month, serving from cache when available.
+  const navigateCalendarMonth = useCallback(
+    async (targetMonth: string) => {
+      const cached = calendarCacheRef.current.get(targetMonth);
+      if (cached) {
+        patch({
+          calendar: { ...stateRef.current.calendar!, dates: cached },
+          calendarMonth: targetMonth,
+        });
+        return;
+      }
+      patch({ calendarMonthLoading: true });
+      try {
+        const monthData = await api.fetchCalendar(
+          payloadRef.current,
+          stateRef.current.nightsFilter,
+          monthDateRange(targetMonth),
+          sid(),
+        );
+        calendarCacheRef.current.set(targetMonth, monthData.dates);
+        patch({
+          calendar: { ...stateRef.current.calendar!, dates: monthData.dates },
+          calendarMonth: targetMonth,
+          calendarMonthLoading: false,
+        });
+      } catch {
+        patch({ calendarMonthLoading: false });
+      }
+    },
+    [patch],
+  );
+
+  // After a first-step filter change: clear downstream + date, reload calendar,
+  // then reconcile departureAirports based on what the calendar returns.
+  //
+  // Package-type reconciliation rules:
+  //   - calendar returns no airports → hotel-only package; commit [] so every
+  //     subsequent dynamicPackage call explicitly passes departureAirports: []
+  //   - calendar returns airports → hotel + flight; if the currently selected
+  //     airport is absent from the new list, promote the best available one and
+  //     re-fetch the calendar so dates are filtered correctly
   const refreshFirstStep = useCallback(
     async (nightsFilter: number | null) => {
       commitPayload({ products: [], selectedDate: undefined, nights: null });
+      calendarCacheRef.current.clear(); // filter changed — all cached months are stale
       patch({
         receipt: null,
         stayValid: false,
@@ -331,7 +447,26 @@ export function BookingProvider({
         carsStatus: "idle",
         carExtras: null,
       });
-      await loadCalendar(nightsFilter);
+      const cal = await loadCalendar(nightsFilter);
+      if (!cal) return;
+      const pType = payloadRef.current.packageType;
+      const isHotelOnly =
+        pType === "EXCLUDING_FLIGHTS" || (pType == null && cal.airports.length === 0);
+      if (isHotelOnly) {
+        commitPayload({ departureAirports: [] });
+      } else {
+        const current = payloadRef.current.departureAirports?.[0];
+        const valid = current ? cal.airports.some((a) => a.iataCode === current) : false;
+        if (!valid) {
+          const def = cal.airports.find((a) => a.selected) ?? cal.airports[0];
+          if (def) {
+            commitPayload({ departureAirports: [def.iataCode] });
+            // Airport changed — cached month data is for the wrong airport.
+            calendarCacheRef.current.clear();
+            await loadCalendar(nightsFilter);
+          }
+        }
+      }
     },
     [commitPayload, loadCalendar, patch],
   );
@@ -477,13 +612,7 @@ export function BookingProvider({
     async (step: StepId) => {
       const nightsFilter = stateRef.current.nightsFilter;
       try {
-        const calendar = await api.fetchCalendar(
-          payloadRef.current,
-          nightsFilter,
-          undefined,
-          sid(),
-        );
-        patch({ calendar });
+        await loadCalendar(nightsFilter);
       } catch {
         /* non-fatal */
       }
@@ -492,7 +621,7 @@ export function BookingProvider({
       }
       await loadStepData(step);
     },
-    [patch, reprice, loadStepData],
+    [loadCalendar, reprice, loadStepData],
   );
 
   const boot = useCallback(async () => {
@@ -509,6 +638,7 @@ export function BookingProvider({
           people: restored.people?.length ? restored.people : [{}, {}],
           groups: restored.groups?.length ? restored.groups : [{ people: [0, 1] }],
           departureAirports: restored.departureAirports,
+          packageType: restored.packageType,
           packageGroup: restored.packageGroup,
           nights: restored.nights ?? null,
           selectedDate: restored.selectedDate,
@@ -539,18 +669,46 @@ export function BookingProvider({
       dispatch({ type: "setPayload", payload: base });
       patch({ offerMeta: meta, steps: buildSteps(meta) });
 
-      const facets = await api.fetchCalendar(base, null, undefined, sid());
+      // Fetch facets for the next 30 days with nights:1 as a safe default.
+      // Passing an explicit date window avoids errors on offers that require
+      // both nights and a date range. If globalMinDate is beyond this window,
+      // loadCalendar (via minDateHint) will navigate to and fetch the correct
+      // month automatically.
+      const today = todayString();
+      const initialWindow = { dateFrom: today, dateTo: addDays(today, 30) };
+      const facets = await api.fetchCalendar(base, 1, initialWindow, sid());
       const leadingAirport =
         facets.airports.find((a) => a.selected) ?? facets.airports[0];
       const leadingGroup = facets.packageGroups[0];
+      // Default to hotel-only when available; fall back to first available type.
+      const leadingPackageType =
+        facets.packageTypes.find((t) => t.type === "EXCLUDING_FLIGHTS") ??
+        facets.packageTypes[0];
+      const isExcludingFlights = leadingPackageType?.type === "EXCLUDING_FLIGHTS";
+
+      // If the offer has no "All nights" flexible option, default to 1 night so
+      // the calendar API call always receives a valid nights argument.
+      const hasFlexibleNights = facets.nightsOptions.some((n) => n.nights === null);
+      const initialNightsFilter: number | null = hasFlexibleNights ? null : 1;
 
       commitPayload({
-        departureAirports: leadingAirport ? [leadingAirport.iataCode] : undefined,
+        packageType: leadingPackageType?.type,
+        // [] = hotel-only signal to the API. For INCLUDING_FLIGHTS with no
+        // airport yet, use undefined (omit) so the second calendar fetch
+        // returns the full available airport list for reconciliation.
+        departureAirports: isExcludingFlights
+          ? []
+          : leadingAirport
+            ? [leadingAirport.iataCode]
+            : undefined,
         packageGroup: leadingGroup ? leadingGroup.id : undefined,
       });
+      patch({ nightsFilter: initialNightsFilter });
 
-      const calendar = await api.fetchCalendar(payloadRef.current, null, undefined, sid());
-      patch({ calendar, booting: false });
+      // Pass facets.minDate as a hint so loadCalendar skips an extra facets
+      // sub-call — the month fetch response supplies the filtered facets.
+      await loadCalendar(initialNightsFilter, facets.minDate);
+      patch({ booting: false });
     } catch (e: any) {
       patch({
         booting: false,
@@ -587,6 +745,25 @@ export function BookingProvider({
     [commitPayload, refreshFirstStep],
   );
 
+  const setPackageType = useCallback(
+    async (type: string) => {
+      const update: Partial<BookingPayload> = { packageType: type };
+      if (type === "EXCLUDING_FLIGHTS") {
+        // Hotel-only: pass explicit [] so the API filters out flights.
+        update.departureAirports = [];
+      } else {
+        // Hotel + flight: clear airports to undefined so the calendar fetch
+        // runs without an airport filter and returns the full available list.
+        // refreshFirstStep will reconcile to the first valid airport afterwards.
+        // Using [] here would signal hotel-only to the API and return no airports.
+        update.departureAirports = undefined;
+      }
+      commitPayload(update);
+      await refreshFirstStep(stateRef.current.nightsFilter);
+    },
+    [commitPayload, refreshFirstStep],
+  );
+
   const setPackageGroup = useCallback(
     async (id: string) => {
       commitPayload({ packageGroup: id });
@@ -603,15 +780,50 @@ export function BookingProvider({
     [patch, refreshFirstStep],
   );
 
+  // Commit a stay (date + nights), pre-select the default accommodation product
+  // via a dynamicPackage call, then reprice. Pre-selecting the A: product before
+  // the receipt call ensures the receipt is priced against a real room/board
+  // rather than the backend having to guess a default.
+  const commitStayAndPrice = useCallback(
+    async (selectedDate: string, nights: number) => {
+      commitPayload({ selectedDate, nights, products: [] });
+      patch({ flexStartDate: null, receiptLoading: true, receiptError: null });
+
+      // Leisure-only offers have no accommodation step; skip the pre-selection.
+      if (!stateRef.current.offerMeta?.isLeisureOnly) {
+        try {
+          const accommodations = await api.fetchAccommodations(payloadRef.current, sid());
+          const hotel = accommodations.find((a) => a.selected) ?? accommodations[0];
+          if (hotel) {
+            const unit = hotel.units.find((u) => u.selected) ?? hotel.units[0];
+            const board = unit?.boards.find((b) => b.selected) ?? unit?.boards[0];
+            const productId = board ? board.id : unit?.id;
+            if (productId) {
+              commitPayload({
+                products: replaceProductFamily(payloadRef.current.products, "A:", {
+                  id: productId,
+                }),
+              });
+            }
+          }
+        } catch {
+          // Non-fatal — proceed to reprice without a pre-selected accommodation.
+        }
+      }
+
+      // receiptLoading is already true; skip the redundant patch inside reprice.
+      await reprice({ showSpinner: false });
+    },
+    [patch, commitPayload, reprice],
+  );
+
   const selectDate = useCallback(
     async (date: string) => {
       const s = stateRef.current;
       const filter = s.nightsFilter;
 
       if (filter != null) {
-        commitPayload({ selectedDate: date, nights: filter, products: [] });
-        patch({ flexStartDate: null });
-        await reprice({ showSpinner: true });
+        await commitStayAndPrice(date, filter);
         return;
       }
 
@@ -629,10 +841,9 @@ export function BookingProvider({
         patch({ flexStartDate: date });
         return;
       }
-      commitPayload({ selectedDate: startDate, nights: match.nights, products: [] });
-      await reprice({ showSpinner: true });
+      await commitStayAndPrice(startDate, match.nights);
     },
-    [patch, commitPayload, reprice],
+    [patch, commitStayAndPrice],
   );
 
   const clearFlexSelection = useCallback(() => {
@@ -870,10 +1081,12 @@ export function BookingProvider({
       state,
       setOccupancy,
       setAirport,
+      setPackageType,
       setPackageGroup,
       setNightsFilter,
       selectDate,
       clearFlexSelection,
+      navigateCalendarMonth,
       goToStep,
       continueFrom,
       resetToDates,
@@ -893,10 +1106,12 @@ export function BookingProvider({
       state,
       setOccupancy,
       setAirport,
+      setPackageType,
       setPackageGroup,
       setNightsFilter,
       selectDate,
       clearFlexSelection,
+      navigateCalendarMonth,
       goToStep,
       continueFrom,
       resetToDates,

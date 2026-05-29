@@ -75,6 +75,10 @@ export const CALENDAR_QUERY = /* GraphQL */ `
           price
           description
         }
+        packageTypes {
+          name
+          type
+        }
         nights {
           nights
           price

@@ -2,10 +2,14 @@ import { BookingPayload } from "./types";
 
 // First-step inputs. packageGroup "" ("All packages") is a valid internal
 // selection but must be omitted from outbound variables.
+//
+// departureAirports semantics:
+//   undefined  — not yet set; omit from the query entirely
+//   []         — hotel-only package; pass an explicit empty array so the API
+//                does not apply a flight/airport filter
+//   ["LHR"]    — hotel + flight; filter by the chosen departure airport
 function airports(p: BookingPayload): string[] | undefined {
-  return p.departureAirports && p.departureAirports.length
-    ? p.departureAirports
-    : undefined;
+  return p.departureAirports;
 }
 
 function packageGroupOut(p: BookingPayload): string | undefined {

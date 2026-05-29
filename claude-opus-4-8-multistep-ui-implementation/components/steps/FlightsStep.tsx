@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Info, Plane } from "lucide-react";
+import {
+  Briefcase,
+  Clock,
+  Info,
+  Luggage,
+  Plane,
+  PlaneLanding,
+  PlaneTakeoff,
+} from "lucide-react";
 import { useBooking } from "@/lib/booking/context";
-import { Flight, FlightLeg } from "@/lib/booking/types";
+import { Flight, FlightLeg, FlightSegment } from "@/lib/booking/types";
 import { findProductByPrefix } from "@/lib/booking/products";
-import { cabinClassLabel } from "@/lib/booking/labels";
+import { cabinClassLabel, durationBetween } from "@/lib/booking/labels";
 import { PriceTag } from "../OptionCard";
 import Modal from "../Modal";
 import StepNav from "./StepNav";
@@ -17,11 +25,39 @@ function time(dt?: string): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-function dateShort(dt?: string): string {
+function dateFull(dt?: string): string {
   if (!dt) return "";
   const d = new Date(dt);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+// Days the arrival falls after departure (for overnight flights), used to
+// render a "+1" badge next to the arrival time.
+function dayOffset(dep?: string, arr?: string): number {
+  if (!dep || !arr) return 0;
+  const a = new Date(dep);
+  const b = new Date(arr);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return 0;
+  const da = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const db = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.max(0, Math.round((db - da) / 86400000));
+}
+
+function airportLine(iata?: string, city?: string): string {
+  if (iata && city) return `${city} (${iata})`;
+  return iata ?? city ?? "";
+}
+
+function segmentLuggage(seg: FlightSegment, leg?: FlightLeg): string {
+  const included = seg.luggageIncluded ?? leg?.luggageIncluded;
+  const allowance = seg.luggageAllowance ?? leg?.luggageAllowance;
+  if (included) return allowance ? `Checked bag · ${allowance}` : "Checked bag included";
+  return "Hand luggage only";
 }
 
 function LegSummary({ leg }: { leg?: FlightLeg }) {
@@ -49,54 +85,153 @@ function LegSummary({ leg }: { leg?: FlightLeg }) {
   );
 }
 
-function FlightDetails({ flight }: { flight: Flight }) {
-  const renderLeg = (leg?: FlightLeg) => {
-    if (!leg) return null;
-    return (
-      <div className="flight-detail-leg">
-        <h3>{leg.label}</h3>
-        {leg.segments.map((s, i) => (
-          <div className="segment" key={i}>
-            <div className="segment-airline">
-              {s.airlineLogo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={s.airlineLogo} alt={s.airline ?? ""} className="airline-logo-sm" />
-              ) : null}
-              <span>
-                {s.airline}
-                {s.flightNumber ? ` · ${s.flightNumber}` : ""}
-              </span>
-            </div>
-            <div className="segment-route">
-              <div>
-                <strong>{time(s.departureTime)}</strong> {s.departureAirport}
-                <span className="muted"> · {dateShort(s.departureTime)}</span>
-              </div>
-              <div className="segment-line" />
-              <div>
-                <strong>{time(s.arrivalTime)}</strong> {s.arrivalAirport}
-                <span className="muted"> · {dateShort(s.arrivalTime)}</span>
-              </div>
-            </div>
-            <div className="segment-meta">
-              {cabinClassLabel(s.cabinClass) ? (
-                <span>{cabinClassLabel(s.cabinClass)}</span>
-              ) : null}
-              <span>
-                {s.luggageIncluded
-                  ? `Luggage: ${s.luggageAllowance ?? "included"}`
-                  : "Hand luggage only"}
-              </span>
-            </div>
-          </div>
-        ))}
+function Segment({ seg, leg }: { seg: FlightSegment; leg?: FlightLeg }) {
+  const cabin = cabinClassLabel(seg.cabinClass);
+  const duration = durationBetween(seg.departureTime, seg.arrivalTime);
+  const flightCode =
+    seg.airlineIata && seg.flightNumber
+      ? `${seg.airlineIata} ${seg.flightNumber}`
+      : seg.flightNumber ?? null;
+  const arrOffset = dayOffset(seg.departureTime, seg.arrivalTime);
+
+  return (
+    <div className="fd-segment">
+      <div className="fd-segment-head">
+        {seg.airlineLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={seg.airlineLogo} alt={seg.airline ?? ""} className="airline-logo-sm" />
+        ) : (
+          <Plane size={20} className="fd-segment-head-icon" />
+        )}
+        <div className="fd-segment-head-text">
+          <span className="fd-airline">{seg.airline ?? "Flight"}</span>
+          <span className="fd-segment-sub">
+            {flightCode ? <span className="fd-flight-code">{flightCode}</span> : null}
+            {cabin ? <span>{cabin}</span> : null}
+          </span>
+        </div>
       </div>
-    );
-  };
+
+      <div className="fd-timeline">
+        <div className="fd-stop">
+          <PlaneTakeoff size={16} className="fd-stop-icon" />
+          <div className="fd-stop-body">
+            <span className="fd-stop-time">{time(seg.departureTime)}</span>
+            <span className="fd-stop-airport">
+              {airportLine(seg.departureAirport, seg.departureCity)}
+            </span>
+            <span className="fd-stop-date">{dateFull(seg.departureTime)}</span>
+          </div>
+        </div>
+
+        <div className="fd-leg-duration">
+          <span className="fd-leg-line" />
+          {duration ? (
+            <span className="fd-duration-chip">
+              <Clock size={12} /> {duration}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="fd-stop">
+          <PlaneLanding size={16} className="fd-stop-icon" />
+          <div className="fd-stop-body">
+            <span className="fd-stop-time">
+              {time(seg.arrivalTime)}
+              {arrOffset > 0 ? <sup className="fd-day-offset">+{arrOffset}</sup> : null}
+            </span>
+            <span className="fd-stop-airport">
+              {airportLine(seg.arrivalAirport, seg.arrivalCity)}
+            </span>
+            <span className="fd-stop-date">{dateFull(seg.arrivalTime)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="fd-segment-meta">
+        <span className="fd-meta-item">
+          <Luggage size={14} /> {segmentLuggage(seg, leg)}
+        </span>
+        {seg.operatingAirline && seg.operatingAirline !== seg.airline ? (
+          <span className="fd-meta-item muted">Operated by {seg.operatingAirline}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Leg({ leg, kind }: { leg?: FlightLeg; kind: "outbound" | "inbound" }) {
+  if (!leg || !leg.segments.length) return null;
+  const first = leg.segments[0];
+  const last = leg.segments[leg.segments.length - 1];
+  const stops = leg.segments.length - 1;
+  const totalDuration = durationBetween(first.departureTime, last.arrivalTime);
+
+  return (
+    <div className="fd-leg">
+      <div className="fd-leg-header">
+        <span className="fd-leg-kind">
+          {kind === "outbound" ? (
+            <PlaneTakeoff size={16} />
+          ) : (
+            <PlaneLanding size={16} />
+          )}
+          {leg.label ?? (kind === "outbound" ? "Outbound" : "Return")}
+        </span>
+        <span className="fd-leg-route">
+          {airportLine(first.departureAirport, first.departureCity)}
+          <span className="fd-arrow">→</span>
+          {airportLine(last.arrivalAirport, last.arrivalCity)}
+        </span>
+        <span className="fd-leg-facts">
+          {totalDuration ? (
+            <span className="fd-leg-fact">
+              <Clock size={13} /> {totalDuration}
+            </span>
+          ) : null}
+          <span className="fd-leg-fact">
+            {stops === 0 ? "Direct" : `${stops} stop${stops > 1 ? "s" : ""}`}
+          </span>
+        </span>
+      </div>
+
+      <div className="fd-segments">
+        {leg.segments.map((s, i) => {
+          const prev = leg.segments[i - 1];
+          const layover = prev
+            ? durationBetween(prev.arrivalTime, s.departureTime)
+            : null;
+          return (
+            <div key={i}>
+              {prev ? (
+                <div className="fd-layover">
+                  <Clock size={13} />
+                  <span>
+                    {layover ? `${layover} connection` : "Connection"} in{" "}
+                    {airportLine(s.departureAirport, s.departureCity)}
+                  </span>
+                </div>
+              ) : null}
+              <Segment seg={s} leg={leg} />
+            </div>
+          );
+        })}
+      </div>
+
+      {leg.handLuggageRules ? (
+        <div className="fd-leg-note">
+          <Briefcase size={14} /> {leg.handLuggageRules}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FlightDetails({ flight }: { flight: Flight }) {
   return (
     <div className="flight-details">
-      {renderLeg(flight.outboundLeg)}
-      {renderLeg(flight.inboundLeg)}
+      <Leg leg={flight.outboundLeg} kind="outbound" />
+      <Leg leg={flight.inboundLeg} kind="inbound" />
     </div>
   );
 }

@@ -61,6 +61,26 @@ export function formatDuration(iso?: string | null): string | null {
   return parts.join(" ");
 }
 
+// Compute a human-readable duration between two ISO datetimes, e.g. "2h 30m".
+// Used for per-segment flight time and connection/layover windows where the
+// backend does not provide an explicit duration field.
+export function durationBetween(
+  start?: string | null,
+  end?: string | null,
+): string | null {
+  if (!start || !end) return null;
+  const a = new Date(start).getTime();
+  const b = new Date(end).getTime();
+  if (isNaN(a) || isNaN(b) || b < a) return null;
+  const totalMins = Math.round((b - a) / 60000);
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0 || hours === 0) parts.push(`${mins}m`);
+  return parts.join(" ");
+}
+
 export function carExtraPayment(prePayable?: boolean): string {
   return prePayable ? "Pay now" : "Pay at desk";
 }

@@ -42,6 +42,8 @@ export interface BookingPayload {
   groups: PersonGroupsInput[];
 
   departureAirports?: string[];
+  // packageType: "INCLUDING_FLIGHTS" | "EXCLUDING_FLIGHTS" — high-level facet.
+  packageType?: string;
   // packageGroup may be "" (the valid "All packages" choice). undefined = unset.
   packageGroup?: string;
   // concrete night count, or null when the "All nights" filter is active
@@ -123,6 +125,11 @@ export interface CalendarPackageGroup {
   description: string | null;
 }
 
+export interface CalendarPackageType {
+  name: string;
+  type: string;
+}
+
 export interface CalendarNightsOption {
   // null means the "All nights" flexible filter
   nights: number | null;
@@ -146,6 +153,7 @@ export interface CalendarData {
   maxDate: string | null;
   airports: CalendarAirport[];
   packageGroups: CalendarPackageGroup[];
+  packageTypes: CalendarPackageType[];
   nightsOptions: CalendarNightsOption[];
   dates: CalendarDate[];
 }

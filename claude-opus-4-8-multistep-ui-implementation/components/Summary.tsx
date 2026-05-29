@@ -5,7 +5,7 @@ import { AlertCircle, ArrowRight, MapPin } from "lucide-react";
 import { useBooking } from "@/lib/booking/context";
 import { formatMoney } from "@/lib/booking/format";
 import Modal from "./Modal";
-import { ItineraryFull, ItineraryPreview } from "./Itinerary";
+import { ItineraryFull } from "./Itinerary";
 import { ReceiptLine } from "@/lib/booking/types";
 
 function DateBlock({
@@ -68,7 +68,7 @@ export default function Summary({ variant }: { variant?: "drawer" }) {
   const currency = offerMeta?.currency ?? "GBP";
 
   const [modal, setModal] = useState<
-    null | "included" | "excluded" | "info" | "itinerary"
+    null | "included" | "excluded" | "info"
   >(null);
 
   if (!offerMeta) return null;
@@ -135,14 +135,13 @@ export default function Summary({ variant }: { variant?: "drawer" }) {
               </div>
 
               {receipt.events.length ? (
-                <div className="summary-itinerary">
-                  <ItineraryPreview events={receipt.events} />
-                  <button
-                    className="link-action"
-                    onClick={() => setModal("itinerary")}
-                  >
-                    View full itinerary
-                  </button>
+                <div
+                  className={`summary-itinerary${
+                    variant === "drawer" ? "" : " summary-itinerary--scroll"
+                  }`}
+                >
+                  <div className="summary-itinerary-head">Your itinerary</div>
+                  <ItineraryFull events={receipt.events} />
                 </div>
               ) : null}
 
@@ -204,15 +203,6 @@ export default function Summary({ variant }: { variant?: "drawer" }) {
             </div>
           ))}
         </div>
-      </Modal>
-
-      <Modal
-        open={modal === "itinerary"}
-        onClose={() => setModal(null)}
-        title="Your itinerary"
-        wide
-      >
-        {receipt ? <ItineraryFull events={receipt.events} /> : null}
       </Modal>
     </div>
   );

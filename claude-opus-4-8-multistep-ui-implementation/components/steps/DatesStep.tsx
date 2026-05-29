@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Minus, Plus } from "lucide-react";
+import { Building2, ChevronDown, Minus, Plus, PlaneTakeoff } from "lucide-react";
 import { useBooking } from "@/lib/booking/context";
 import { formatMoney } from "@/lib/booking/format";
 import Calendar from "../Calendar";
@@ -154,6 +154,7 @@ export default function DatesStep() {
   const {
     state,
     setAirport,
+    setPackageType,
     setPackageGroup,
     setNightsFilter,
   } = useBooking();
@@ -161,20 +162,53 @@ export default function DatesStep() {
   const currency = state.offerMeta?.currency ?? "GBP";
   const disabled = calendarLoading;
 
+  const isExcludingFlights = payload.packageType === "EXCLUDING_FLIGHTS";
+
   const airportOptions =
-    calendar?.airports.map((a) => ({
-      value: a.iataCode,
-      label: `${a.name} (${a.iataCode})`,
-      hint: `from ${formatMoney(a.price, currency)}`,
-    })) ?? [];
+    !isExcludingFlights
+      ? (calendar?.airports?.map((a) => ({
+          value: a.iataCode,
+          label: `${a.name} (${a.iataCode})`,
+          hint: `from ${formatMoney(a.price, currency)}`,
+        })) ?? [])
+      : [];
 
   const selectedAirport = payload.departureAirports?.[0] ?? null;
 
   const nightsOptions = calendar?.nightsOptions ?? [];
+  const packageTypes = calendar?.packageTypes ?? [];
+
+  // When the API returns no nights options, synthesise a 1–31 range so the
+  // user can still select a stay length. Chips have no price in this mode.
+  const SYNTHETIC_NIGHTS = Array.from({ length: 31 }, (_, i) => i + 1);
+  const useSyntheticNights = calendar != null && nightsOptions.length === 0;
 
   return (
     <div className="step-panel">
       <h1 className="step-title">When would you like to go?</h1>
+
+      {packageTypes.length > 1 ? (
+        <div className="filter-block package-type-block">
+          <span className="field-label">Trip type</span>
+          <div className="package-type-cards">
+            {packageTypes.map((t) => (
+              <button
+                key={t.type}
+                className={`package-type-card${payload.packageType === t.type ? " is-selected" : ""}`}
+                onClick={() => setPackageType(t.type)}
+                disabled={disabled}
+              >
+                {t.type === "INCLUDING_FLIGHTS" ? (
+                  <PlaneTakeoff size={16} className="package-type-card-icon" />
+                ) : (
+                  <Building2 size={16} className="package-type-card-icon" />
+                )}
+                <span className="package-type-card-name">{t.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className={`dates-filters${disabled ? " is-disabled" : ""}`}>
         <OccupancyField />
@@ -193,7 +227,7 @@ export default function DatesStep() {
         ) : null}
       </div>
 
-      {calendar?.packageGroups.length ? (
+      {calendar?.packageGroups?.length ? (
         <div className="filter-block">
           <span className="field-label">Package</span>
           <div className="package-cards">
@@ -235,6 +269,25 @@ export default function DatesStep() {
                   disabled={disabled}
                 >
                   {n.nights == null ? "All nights" : `${n.nights} nights`}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : useSyntheticNights ? (
+        <div className="filter-block">
+          <span className="field-label">Length of stay</span>
+          <div className="nights-chips">
+            {SYNTHETIC_NIGHTS.map((n) => {
+              const isSelected = (state.nightsFilter ?? 1) === n;
+              return (
+                <button
+                  key={n}
+                  className={`chip${isSelected ? " is-selected" : ""}`}
+                  onClick={() => setNightsFilter(n)}
+                  disabled={disabled}
+                >
+                  {`${n} ${n === 1 ? "night" : "nights"}`}
                 </button>
               );
             })}

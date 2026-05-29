@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useBooking } from "@/lib/booking/context";
 import { CalendarDate } from "@/lib/booking/types";
 import { formatDelta, formatMoney } from "@/lib/booking/format";
-import { addDays } from "@/lib/booking/dates";
+import { addDays, prevYearMonth, nextYearMonth } from "@/lib/booking/dates";
 
 function ym(date: string): string {
   return date.slice(0, 7);
@@ -17,8 +17,16 @@ function monthLabel(ymStr: string): string {
 }
 
 export default function Calendar() {
-  const { state, selectDate, clearFlexSelection } = useBooking();
-  const { calendar, calendarLoading, nightsFilter, flexStartDate, payload } = state;
+  const { state, selectDate, clearFlexSelection, navigateCalendarMonth } = useBooking();
+  const {
+    calendar,
+    calendarLoading,
+    calendarMonth,
+    calendarMonthLoading,
+    nightsFilter,
+    flexStartDate,
+    payload,
+  } = state;
   const currency = payload.offerMeta?.currency ?? "GBP";
   const selectedDate = payload.selectedDate;
 
@@ -28,17 +36,6 @@ export default function Calendar() {
     for (const d of dates) m.set(d.date, d);
     return m;
   }, [dates]);
-
-  const months = useMemo(() => {
-    const set = new Set<string>();
-    for (const d of dates) set.add(ym(d.date));
-    return Array.from(set).sort();
-  }, [dates]);
-
-  const [monthIdx, setMonthIdx] = useState(0);
-  // Clamp month index to available months.
-  const activeMonthIdx = Math.min(monthIdx, Math.max(0, months.length - 1));
-  const activeMonth = months[activeMonthIdx];
 
   // Flexible checkout mode: derive valid checkout dates from the start date.
   const flexInfo = useMemo(() => {
@@ -52,22 +49,29 @@ export default function Calendar() {
     return map;
   }, [nightsFilter, flexStartDate, byDate]);
 
-  if (!activeMonth) {
+  // Navigation bounds derived from the API-supplied min/max dates.
+  const minMonth = calendar?.minDate ? ym(calendar.minDate) : null;
+  const maxMonth = calendar?.maxDate ? ym(calendar.maxDate) : null;
+  const prevMonth = calendarMonth ? prevYearMonth(calendarMonth) : null;
+  const nextMonth = calendarMonth ? nextYearMonth(calendarMonth) : null;
+  const canGoPrev = !!prevMonth && !!minMonth && prevMonth >= minMonth;
+  const canGoNext = !!nextMonth && (!maxMonth || nextMonth <= maxMonth);
+  const navDisabled = calendarMonthLoading;
+
+  if (!calendarMonth) {
     return (
       <div className="calendar">
-        {calendarLoading ? (
-          <div className="calendar-loading">
-            <span className="spinner" />
-          </div>
-        ) : (
-          <p className="muted">No dates available for this selection.</p>
-        )}
+        <div className="calendar-loading">
+          <span className="spinner" />
+        </div>
       </div>
     );
   }
 
+  const hasAnyAvailability = dates.some((d) => d.quantity > 0);
+
   // Build the day grid for the active month.
-  const [y, mo] = activeMonth.split("-").map(Number);
+  const [y, mo] = calendarMonth.split("-").map(Number);
   const firstOfMonth = new Date(y, mo - 1, 1);
   const startWeekday = (firstOfMonth.getDay() + 6) % 7; // Monday-first
   const daysInMonth = new Date(y, mo, 0).getDate();
@@ -75,7 +79,7 @@ export default function Calendar() {
   const cells: ({ date: string; day: number } | null)[] = [];
   for (let i = 0; i < startWeekday; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
-    const date = `${activeMonth}-${String(d).padStart(2, "0")}`;
+    const date = `${calendarMonth}-${String(d).padStart(2, "0")}`;
     cells.push({ date, day: d });
   }
 
@@ -86,19 +90,17 @@ export default function Calendar() {
       <div className="calendar-header">
         <button
           className="calendar-chevron"
-          onClick={() => setMonthIdx((i) => Math.max(0, activeMonthIdx - 1))}
-          disabled={activeMonthIdx === 0}
+          onClick={() => prevMonth && navigateCalendarMonth(prevMonth)}
+          disabled={!canGoPrev || navDisabled}
           aria-label="Previous month"
         >
           <ChevronLeft size={20} />
         </button>
-        <span className="calendar-month">{monthLabel(activeMonth)}</span>
+        <span className="calendar-month">{monthLabel(calendarMonth)}</span>
         <button
           className="calendar-chevron"
-          onClick={() =>
-            setMonthIdx((i) => Math.min(months.length - 1, activeMonthIdx + 1))
-          }
-          disabled={activeMonthIdx >= months.length - 1}
+          onClick={() => nextMonth && navigateCalendarMonth(nextMonth)}
+          disabled={!canGoNext || navDisabled}
           aria-label="Next month"
         >
           <ChevronRight size={20} />
@@ -171,12 +173,16 @@ export default function Calendar() {
           );
         })}
 
-        {calendarLoading ? (
+        {(calendarLoading || calendarMonthLoading) ? (
           <div className="calendar-overlay">
             <span className="spinner" />
           </div>
         ) : null}
       </div>
+
+      {!calendarLoading && !calendarMonthLoading && !hasAnyAvailability ? (
+        <p className="calendar-no-dates">No dates available this month.</p>
+      ) : null}
 
       {flexMode ? (
         <button className="calendar-clear" onClick={() => clearFlexSelection()}>

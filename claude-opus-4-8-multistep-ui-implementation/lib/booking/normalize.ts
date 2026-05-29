@@ -19,6 +19,7 @@ import {
   LeisureUnit,
   OfferMeta,
   CalendarData,
+  CalendarPackageType,
   PaymentMethod,
   ReceiptData,
   ReceiptLine,
@@ -113,6 +114,12 @@ export function normalizeCalendar(raw: any): CalendarData {
           name: g.name ?? "",
           price: num(g.price),
           description: g.description ?? null,
+        }))
+      : [],
+    packageTypes: Array.isArray(c.packageTypes)
+      ? c.packageTypes.map((t: any): CalendarPackageType => ({
+          name: t.name ?? "",
+          type: t.type ?? "",
         }))
       : [],
     nightsOptions: Array.isArray(c.nights)
