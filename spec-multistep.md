@@ -385,8 +385,17 @@ Let the user review included leisure choices and opt into optional activities.
 ### Grouping rules
 
 - Included leisure variation sets group by parent leisure product
-- Optional leisure presentation groups by activity title first
-- Inside an optional group, day selection determines which date-specific `L:` product ID is used
+- Optional leisure is returned as one group per day slot (`leisures[]` entries carry
+  a `date` and `optional: true`); each day slot exposes its available excursions as
+  the group's `units[]` variations
+- Render optional leisure as one selectable section per day slot, where the user
+  either opts into one variation for that day or explicitly chooses `No thanks`
+- The chosen variation's `units[].id` is the date-specific `L:` product ID used for
+  that day; only one variation per day group can be selected at a time
+- Note: an earlier revision of this spec described optional leisure as grouped "by
+  activity title first, then by day". The live schema groups by day slot first with
+  alternative activities as variations inside, so the implementation follows the
+  day-slot model above.
 
 ### Included leisure behavior
 

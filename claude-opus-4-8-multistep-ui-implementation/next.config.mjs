@@ -19,8 +19,6 @@ const nextConfig = {
         source: "/(.*)",
         headers: [
           // Allow embedding from any origin (e.g. presentation slides).
-          // CSP frame-ancestors takes precedence over X-Frame-Options in all
-          // modern browsers, so this effectively removes the framing restriction.
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
         ],
       },

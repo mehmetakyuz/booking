@@ -602,10 +602,18 @@ Leisure unit field notes:
 Leisure grouping rules:
 
 - included leisure variations are grouped by parent leisure product
-- optional leisure presentation is grouped by activity title first, then by day inside that choice
-- different days may map to different `L:` product IDs
+- optional leisure is returned as one `leisures[]` group per day slot, each carrying a
+  `date` and `optional: true`; the alternative excursions for that day are the group's
+  `units[]` variations
+- present each optional day slot as one section with a `No thanks` opt-out and at most
+  one selected variation; the selected variation's `units[].id` is the date-specific
+  `L:` product ID for that day
+- different day slots map to different `L:` product IDs
 - use the unit-level `selected` flag for default variation selection
 - do not treat the leisure-level `selected` flag as meaning every variation is selected
+- (Schema note: an earlier revision described optional leisure as grouped "by activity
+  title first, then by day". The live schema groups by day slot first, so the
+  implementation follows the day-slot model.)
 
 Rendering note:
 
