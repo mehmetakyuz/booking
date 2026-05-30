@@ -275,14 +275,14 @@ This is the stay-definition step.
 - The length-of-stay selector must have a visible selected state after boot
 - On boot, inspect the `nightsOptions` returned by the initial facets call (made with `nights: [1]`) and apply this decision tree:
 
-  | Condition | `nightsFilter` | Calendar refetch? |
+  | Condition | `nightsFilter` | Notes |
   |---|---|---|
-  | Includes `null` (flexible/All nights) | `null` | No |
-  | Includes `1` but no `null` | `1` | No — initial facets call already used `1` |
-  | Includes other values but NOT `1` and NOT `null` | `null` | Yes — initial call used `1` which is invalid; reload without a nights constraint, using `globalMinDate` to land on the correct month |
-  | Empty array | `1` | No — synthetic 1–31 selector is shown |
+  | Includes `null` (All nights / flexible) | `null` | — |
+  | Includes `1` but no `null` | `1` | Initial facets call used `1`, no reload needed |
+  | Includes other values but NOT `1` and NOT `null` | First available value (e.g. `2`) | Initial call used invalid `1`; reload with the correct value using `globalMinDate` to land on the right month |
+  | Empty array | `1` | Synthetic 1–31 selector shown; no API nights constraint |
 
-  Never force `nightsFilter = 1` when `1` is not a valid option — passing an invalid nights value to the API causes an error.
+  Never force `nightsFilter = 1` when `1` is not a valid option — passing an invalid nights value causes an API error. Always use the first value the API returned.
 
 - If the API returns an **empty** `nightsOptions` array, synthesise a 1–31 chip selector so the user can still pick a stay length; chips show night counts only (no prices); the default selection is `1`
 - If the API returns `All nights` / `nights: null` as the selected/default length filter, keep that chip selected while the user chooses a flexible start and checkout date
