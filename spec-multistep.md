@@ -127,17 +127,18 @@ interface MultistepState {
 On `/offers/[offerId]`:
 
 1. Fetch offer metadata
-2. Fetch initial calendar facets (no filters) to discover:
+2. Fetch initial calendar facets (`nights: [1]`, `dateFrom: today`, `dateTo: today+30`) to discover:
    - available `packageTypes` → default to `EXCLUDING_FLIGHTS` or first available
    - available `departureAirports` → default to first selected/available
    - available `packageGroups` → default to first
-   - `nightsOptions` → if no `null` option present, default `nightsFilter` to `1`
-   - `minDate` → used to determine the initial calendar month
-3. Commit the derived defaults to the payload
-4. Fetch the first month of calendar dates (using the committed filters and the correct `nightsFilter`)
-5. Build steps from offer meta
-6. Render summary shell immediately
-7. Wait for the first valid receipt after a stay is selected
+   - `nightsOptions` → apply the decision table to pick `initialNightsFilter`
+3. Commit the derived defaults (packageType, departureAirports, packageGroup, nightsFilter)
+4. Fetch filtered facets with the committed payload and `initialNightsFilter`, **no date range** — this gives the accurate `globalMinDate` for the offer and corrects facets for the actual filter context. The `minDate` from step 2 is unreliable because that call used `nights: [1]` with a narrow date window; the true global min must come from step 4.
+5. Determine the initial calendar month from `globalMinDate` (jump to that month if it is more than 30 days away, otherwise use today's month)
+6. Fetch the first month of calendar dates using `dateFrom`/`dateTo` for that month
+7. Build steps from offer meta
+8. Render summary shell immediately
+9. Wait for the first valid receipt after a stay is selected
 
 ### Repricing model
 

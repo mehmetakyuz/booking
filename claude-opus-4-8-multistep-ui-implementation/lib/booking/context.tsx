@@ -726,10 +726,12 @@ export function BookingProvider({
       });
       patch({ nightsFilter: initialNightsFilter });
 
-      // Always pass facets.minDate so loadCalendar jumps to the right month.
-      // When 1 night was not a valid option, initialNightsFilter is already null
-      // so the month fetch runs without a nights constraint.
-      await loadCalendar(initialNightsFilter, facets.minDate);
+      // Do NOT pass facets.minDate as a hint. The initial call used nights:1
+      // with a 30-day window, so its minDate is unreliable for offers where
+      // 1 night is not a valid option. Let loadCalendar make its own facets
+      // call with the committed filters and correct nightsFilter to get the
+      // true global minDate, then pick the right starting month from that.
+      await loadCalendar(initialNightsFilter);
       patch({ booting: false });
     } catch (e: any) {
       patch({

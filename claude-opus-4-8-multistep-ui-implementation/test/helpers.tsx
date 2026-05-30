@@ -30,6 +30,8 @@ export function makeState(over: Partial<BookingContextValue["state"]> = {}) {
     hydrating: false,
     calendar: fx.calendar(),
     calendarLoading: false,
+    calendarMonth: "2026-06",
+    calendarMonthLoading: false,
     nightsFilter: null,
     flexStartDate: null,
     receipt: fx.receipt(),
