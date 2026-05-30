@@ -95,6 +95,8 @@ describe("normalizeCalendar", () => {
         calendar: {
           minDate: "2026-01-01",
           maxDate: "2026-03-01",
+          globalMinDate: "2026-01-01",
+          globalMaxDate: "2026-06-01",
           departureAirports: [
             {
               selected: true,
@@ -102,7 +104,7 @@ describe("normalizeCalendar", () => {
               airport: { iataCode: "LHR", name: "Heathrow", cityName: "London" },
             },
           ],
-          packageGroups: [{ id: "pg1", name: "Std", price: 200, description: "d" }],
+          packageGroups: [{ id: "pg1", name: "Std", price: 200, description: "d" }, {}],
           packageTypes: [{ name: "Flight + hotel", type: "FLIGHT_HOTEL" }, {}],
           nights: [{ nights: 7, price: 50 }, { nights: null, price: 0 }],
           dates: [
@@ -113,6 +115,9 @@ describe("normalizeCalendar", () => {
       },
     });
     expect(c.minDate).toBe("2026-01-01");
+    expect(c.globalMinDate).toBe("2026-01-01");
+    expect(c.globalMaxDate).toBe("2026-06-01");
+    expect(c.packageGroups[1]).toEqual({ id: "", name: "", price: 0, description: null });
     expect(c.airports[0]).toEqual({
       selected: true,
       price: 100,
@@ -138,6 +143,8 @@ describe("normalizeCalendar", () => {
     expect(c).toEqual({
       minDate: null,
       maxDate: null,
+      globalMinDate: null,
+      globalMaxDate: null,
       airports: [],
       packageGroups: [],
       packageTypes: [],
@@ -192,7 +199,9 @@ describe("normalizeReceipt", () => {
       lines: [
         { __typename: "ReceiptLineAmount", label: "Base", format: "f", amount: 800, perPerson: 400 },
         { __typename: "ReceiptLineText", label: "Note", text: "txt" },
+        { __typename: "ReceiptLineText" }, // defaults label/format/text
         { __typename: "ReceiptLineOther", label: "Plain" },
+        { __typename: "ReceiptLineOther" }, // defaults label/format
         { __typename: "ReceiptLineAmount" },
       ],
       included: [{ title: "Bag", price: 10 }, {}],
@@ -254,8 +263,10 @@ describe("normalizeReceipt", () => {
     });
     expect(r.lines[0]).toEqual({ kind: "amount", label: "Base", format: "f", amount: 800, perPerson: 400 });
     expect(r.lines[1]).toEqual({ kind: "text", label: "Note", format: null, text: "txt" });
-    expect(r.lines[2]).toEqual({ kind: "plain", label: "Plain", format: null });
-    expect(r.lines[3]).toEqual({ kind: "amount", label: "", format: null, amount: 0, perPerson: null });
+    expect(r.lines[2]).toEqual({ kind: "text", label: "", format: null, text: "" });
+    expect(r.lines[3]).toEqual({ kind: "plain", label: "Plain", format: null });
+    expect(r.lines[4]).toEqual({ kind: "plain", label: "", format: null });
+    expect(r.lines[5]).toEqual({ kind: "amount", label: "", format: null, amount: 0, perPerson: null });
     expect(r.included).toEqual([{ title: "Bag", price: 10 }, { title: "", price: 0 }]);
     expect(r.excluded).toEqual([{ title: "Tip", price: 5 }, { title: "", price: 0 }]);
     expect(r.instalmentsPayments[0][0]).toEqual({
@@ -303,6 +314,29 @@ describe("normalizeReceipt", () => {
       itinerary: { events: [{ components: [{ __typename: "ItineraryFlightComponent" }] }] },
     });
     expect(r.events[0].components[0].segments).toEqual([]);
+  });
+
+  it("defaults every field of a bare itinerary flight segment", () => {
+    const r = normalizeReceipt({
+      itinerary: {
+        events: [
+          { components: [{ __typename: "ItineraryFlightComponent", leg: { segments: [{}] } }] },
+        ],
+      },
+    });
+    expect(r.events[0].components[0].segments?.[0]).toEqual({
+      airline: undefined,
+      airlineLogo: undefined,
+      operatingAirline: undefined,
+      flightNumber: undefined,
+      cabinClass: undefined,
+      luggageIncluded: undefined,
+      luggageAllowance: undefined,
+      departureTime: undefined,
+      departureAirport: undefined,
+      arrivalTime: undefined,
+      arrivalAirport: undefined,
+    });
   });
 
   it("defaults bare accommodation and car itinerary components", () => {
@@ -400,7 +434,7 @@ describe("normalizeAccommodations", () => {
       dynamicPackage: {
         accomodations: [
           {},
-          { id: "A:2", units: [{ id: "U:2", boards: [{}] }] },
+          { id: "A:2", units: [{ boards: [{}] }] },
         ],
       },
     });

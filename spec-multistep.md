@@ -727,3 +727,29 @@ The UI is complete only if:
 - step transitions feel immediate, with shared in-panel skeleton/loading treatments rather than ad hoc per-step busy labels
 - the always-visible inline itinerary shows specific product details and keeps the total reachable
 - refresh restore works without a visible full-page reload caused by URL syncing
+- an automated test suite runs with `npm run test` and enforces the coverage bar described in "Testing"
+
+## Testing
+
+The implementation must ship an automated test suite.
+
+### Tooling and entry point
+
+- The suite must be runnable with `npm run test` and must exit non-zero if any test fails or a coverage threshold is not met
+- Use a fast, TypeScript-native runner with a jsdom environment and a React component testing library (for example Vitest + Testing Library); the choice is the implementer's, but `npm run test` is the required entry point
+- Run with coverage enabled by default and pin the timezone (for example `TZ=UTC`) so date-dependent assertions are deterministic
+
+### Coverage requirement
+
+- The target is 100% coverage. Coverage thresholds must be enforced by the runner (the command fails when coverage drops below the bar), not merely reported
+- The pure logic and data layer must be held at 100% statements, functions and lines: formatters, label maps, date helpers, the step builder, product helpers, GraphQL variable builders, response normalizers, URL-state encoding, the session id, and the GraphQL transport
+  - Branch coverage of this layer must also be 100%, with the only permitted exceptions being defensively-unreachable guards, which must be called out
+- The stateful React provider (the booking context: async thunks, task-group polling, repricing, navigation, restore) and all UI components/steps must be covered by behavioural render-and-interact tests held to a high bar (≥90% lines for the provider, ≥95% lines for components)
+
+### What to test
+
+- Pure modules: exercise every branch with both populated and missing-field inputs, including the empty/`null` API-shape fallbacks the normalizers defend against
+- Data layer: mock the GraphQL transport; assert query/variable shaping, family-stripping before option fetches, task-group orchestration (start → poll → finished/failed/timeout) and order creation, including error and timeout paths
+- Context/provider: drive it through a mocked API across the whole journey — boot (fresh, restored-from-URL, error), first-step filter changes and airport/package reconciliation, fixed and flexible date selection, repricing success/error/guarded-reset, each product selection, flight/car async search states and price-change notices, and order submission outcomes
+- Components: assert loading, empty, error and populated states; selection and keyboard interactions; modal open/close; and the flight-details breakdown, the inline itinerary, and the receipt panel
+- Keep tests resilient to incidental change: assert behaviour and key output, not exact call counts or volatile formatting

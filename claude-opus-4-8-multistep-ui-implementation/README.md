@@ -22,6 +22,17 @@ npm run dev        # http://localhost:3000/offers/117011
 
 `npm run build` produces an optimized production build.
 
+## Test
+
+```bash
+npm run test       # Vitest + coverage (TZ-pinned), fails under the coverage bar
+npm run test:watch # interactive watch mode
+```
+
+The suite covers the pure logic/data layer at 100% (statements/functions/lines)
+and the React provider + components with behavioural render-and-interact tests.
+See the "Testing" section of `spec-multistep.md` for the coverage contract.
+
 ### Environment
 
 `.env.local` (already present) sets the upstream API:

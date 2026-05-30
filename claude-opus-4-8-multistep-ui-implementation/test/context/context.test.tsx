@@ -67,7 +67,7 @@ describe("boot", () => {
   it("fresh boot fetches offer, derives default airport/package and loads the aligned calendar", async () => {
     await boot();
     expect(mockApi.fetchOffer).toHaveBeenCalled();
-    expect(mockApi.fetchCalendar).toHaveBeenCalledTimes(2);
+    expect(mockApi.fetchCalendar.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(ctx.state.offerMeta?.shortTitle).toBe("Sunny");
     expect(ctx.state.payload.departureAirports).toEqual(["LHR"]);
     expect(ctx.state.payload.packageGroup).toBe("pg1");

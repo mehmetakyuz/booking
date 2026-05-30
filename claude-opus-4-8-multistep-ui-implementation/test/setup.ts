@@ -11,6 +11,5 @@ afterEach(() => {
 // jsdom ships a throwing `window.scrollTo` stub; the context calls it on
 // navigation, so replace it with a silent noop.
 if (typeof window !== "undefined") {
-  // @ts-expect-error - assigning a noop test stub
-  window.scrollTo = () => {};
+  window.scrollTo = (() => {}) as typeof window.scrollTo;
 }

@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run --coverage",
-    "test:watch": "vitest"
+    "test": "TZ=UTC vitest run --coverage",
+    "test:watch": "TZ=UTC vitest"
   },
   "dependencies": {
     "lucide-react": "^0.475.0",

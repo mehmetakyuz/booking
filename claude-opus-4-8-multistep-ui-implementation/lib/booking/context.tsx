@@ -684,23 +684,16 @@ export function BookingProvider({
       dispatch({ type: "setPayload", payload: base });
       patch({ offerMeta: meta, steps: buildSteps(meta) });
 
-      // Discovery call: fetch facets without a nights filter so nightsOptions
-      // reflects the offer's actual available night counts, not a filtered view.
-      // Some offers require a nights value and will error without one — catch
-      // that and retry with 1 as a safe fallback.
-      // Always pass a 30-day dateFrom/dateTo window to satisfy offers that also
-      // require a date range.
-      const today = todayString();
-      const initialWindow = { dateFrom: today, dateTo: addDays(today, 30) };
+      // Discovery call: no date range so globalMinDate is returned correctly
+      // (a date-windowed call returns globalMinDate=null when the offer starts
+      // outside the window, breaking the starting-month calculation).
+      // Try without nights first so nightsOptions is unfiltered. Some offers
+      // require a nights value and will error — catch that and retry with 1.
       let facets: Awaited<ReturnType<typeof api.fetchCalendar>>;
       try {
-        facets = await api.fetchCalendar(base, null, initialWindow, sid());
+        facets = await api.fetchCalendar(base, null, undefined, sid());
       } catch {
-        // Offer requires a nights value — fall back to 1 so the call succeeds.
-        // nightsOptions may be slightly distorted but globalMinDate will be
-        // accurate, and loadCalendar's internal facets call will correct the
-        // nights filter if needed.
-        facets = await api.fetchCalendar(base, 1, initialWindow, sid());
+        facets = await api.fetchCalendar(base, 1, undefined, sid());
       }
       const leadingAirport =
         facets.airports.find((a) => a.selected) ?? facets.airports[0];
