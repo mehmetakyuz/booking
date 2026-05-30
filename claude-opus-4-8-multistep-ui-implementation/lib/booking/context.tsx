@@ -309,10 +309,13 @@ export function BookingProvider({
   // minDateHint — when provided (e.g. from the boot's pre-flight facets call)
   // the internal facets sub-call is skipped and the first API call goes
   // straight to the month; the month response itself supplies the facets.
+  // globalMinDateHint — when provided (from the boot discovery call) we can
+  // skip the internal facets sub-call: globalMinDate is filter-agnostic and
+  // gives us the correct starting month without an extra round-trip.
   const loadCalendar = useCallback(
     async (
       nightsFilter: number | null,
-      minDateHint?: string | null,
+      globalMinDateHint?: string | null,
     ): Promise<CalendarData | null> => {
       patch({ calendarLoading: true });
       // Track startMonth outside the try so the catch can still set calendarMonth
@@ -320,17 +323,17 @@ export function BookingProvider({
       let startMonth: string | null = null;
       try {
         let facets: CalendarData | null = null;
-        let minDate: string | null = minDateHint ?? null;
+        // Use the hint when available to skip an extra facets round-trip.
+        const haveHint = globalMinDateHint !== undefined && globalMinDateHint !== null;
 
-        if (minDate == null) {
-          // Fetch facets first to discover minDate and airport availability.
+        if (!haveHint) {
+          // Fetch facets first to discover globalMinDate and airport availability.
           facets = await api.fetchCalendar(
             payloadRef.current,
             nightsFilter,
             undefined,
             sid(),
           );
-          minDate = facets.minDate;
           // Auto-correct when nightsFilter is null but the offer requires a
           // specific nights value. Use the same priority as boot:
           //   flexible option → keep null
@@ -348,7 +351,12 @@ export function BookingProvider({
           }
         }
 
-        startMonth = pickInitialMonth(minDate, payloadRef.current.selectedDate);
+        // Use globalMinDate (filter-agnostic) over minDate (filter-specific)
+        // so we always open on the offer's true first available month.
+        const globalMin = haveHint
+          ? globalMinDateHint!
+          : (facets?.globalMinDate ?? facets?.minDate ?? null);
+        startMonth = pickInitialMonth(globalMin, payloadRef.current.selectedDate);
 
         let monthDates = calendarCacheRef.current.get(startMonth);
         if (!monthDates) {
@@ -360,12 +368,12 @@ export function BookingProvider({
           );
           monthDates = monthData.dates;
           calendarCacheRef.current.set(startMonth, monthDates);
-          // When minDateHint was provided we skipped the facets call; use the
+          // When hint was provided we skipped the facets call; use the
           // month response for facets instead.
           if (!facets) facets = monthData;
         }
 
-        // Edge case: minDateHint provided AND the month was already cached —
+        // Edge case: hint provided AND the month was already cached —
         // we have dates but no facets. Fetch facets now.
         if (!facets) {
           facets = await api.fetchCalendar(
@@ -388,7 +396,7 @@ export function BookingProvider({
         patch({
           calendarLoading: false,
           calendarMonth:
-            startMonth ?? pickInitialMonth(minDateHint ?? null, payloadRef.current.selectedDate),
+            startMonth ?? pickInitialMonth(globalMinDateHint ?? null, payloadRef.current.selectedDate),
         });
         return null;
       }
@@ -726,12 +734,12 @@ export function BookingProvider({
       });
       patch({ nightsFilter: initialNightsFilter });
 
-      // Do NOT pass facets.minDate as a hint. The initial call used nights:1
-      // with a 30-day window, so its minDate is unreliable for offers where
-      // 1 night is not a valid option. Let loadCalendar make its own facets
-      // call with the committed filters and correct nightsFilter to get the
-      // true global minDate, then pick the right starting month from that.
-      await loadCalendar(initialNightsFilter);
+      // Pass globalMinDate from the discovery call as the hint. Unlike minDate,
+      // globalMinDate is filter-agnostic (unaffected by nights or date-window
+      // constraints) so it correctly identifies the offer's first available
+      // month. Using it as a hint lets loadCalendar skip an extra facets
+      // round-trip and go straight to the month fetch.
+      await loadCalendar(initialNightsFilter, facets.globalMinDate);
       patch({ booting: false });
     } catch (e: any) {
       patch({

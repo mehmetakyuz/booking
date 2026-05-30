@@ -64,6 +64,8 @@ export const CALENDAR_QUERY = /* GraphQL */ `
       ) {
         minDate
         maxDate
+        globalMinDate
+        globalMaxDate
         departureAirports {
           selected
           price

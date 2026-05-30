@@ -49,9 +49,14 @@ export default function Calendar() {
     return map;
   }, [nightsFilter, flexStartDate, byDate]);
 
-  // Navigation bounds derived from the API-supplied min/max dates.
-  const minMonth = calendar?.minDate ? ym(calendar.minDate) : null;
-  const maxMonth = calendar?.maxDate ? ym(calendar.maxDate) : null;
+  // Navigation bounds: prefer globalMin/MaxDate (filter-agnostic) so the
+  // arrows reflect the offer's true availability range, not the filtered view.
+  const minMonth = calendar
+    ? ym(calendar.globalMinDate ?? calendar.minDate ?? "")  || null
+    : null;
+  const maxMonth = calendar
+    ? ym(calendar.globalMaxDate ?? calendar.maxDate ?? "") || null
+    : null;
   const prevMonth = calendarMonth ? prevYearMonth(calendarMonth) : null;
   const nextMonth = calendarMonth ? nextYearMonth(calendarMonth) : null;
   const canGoPrev = !!prevMonth && !!minMonth && prevMonth >= minMonth;

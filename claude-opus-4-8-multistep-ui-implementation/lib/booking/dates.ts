@@ -46,16 +46,20 @@ export function monthDateRange(yearMonth: string): { dateFrom: string; dateTo: s
 
 // Decide which month to open the calendar on.
 // - If there is an already-selected date, show its month.
-// - Otherwise default to today's month unless globalMinDate is more than 30 days
-//   away, in which case jump straight to globalMinDate's month.
+// - Otherwise use globalMinDate (the offer's absolute first available date,
+//   unaffected by active filters). If globalMinDate is more than 30 days away
+//   jump straight to that month; otherwise open today's month.
+// - Falls back to minDate when globalMinDate is absent.
 export function pickInitialMonth(
   globalMinDate: string | null,
   selectedDate?: string,
+  minDate?: string | null,
 ): string {
   if (selectedDate) return selectedDate.slice(0, 7);
   const today = todayString();
-  if (globalMinDate && globalMinDate > addDays(today, 30)) {
-    return globalMinDate.slice(0, 7);
+  const anchor = globalMinDate ?? minDate ?? null;
+  if (anchor && anchor > addDays(today, 30)) {
+    return anchor.slice(0, 7);
   }
   return today.slice(0, 7);
 }

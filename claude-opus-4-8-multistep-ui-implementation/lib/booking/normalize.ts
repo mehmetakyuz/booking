@@ -99,6 +99,8 @@ export function normalizeCalendar(raw: any): CalendarData {
   return {
     minDate: c.minDate ?? null,
     maxDate: c.maxDate ?? null,
+    globalMinDate: c.globalMinDate ?? null,
+    globalMaxDate: c.globalMaxDate ?? null,
     airports: Array.isArray(c.departureAirports)
       ? c.departureAirports.map((a: any) => ({
           selected: !!a.selected,

@@ -151,6 +151,8 @@ export interface CalendarDate {
 export interface CalendarData {
   minDate: string | null;
   maxDate: string | null;
+  globalMinDate: string | null;
+  globalMaxDate: string | null;
   airports: CalendarAirport[];
   packageGroups: CalendarPackageGroup[];
   packageTypes: CalendarPackageType[];

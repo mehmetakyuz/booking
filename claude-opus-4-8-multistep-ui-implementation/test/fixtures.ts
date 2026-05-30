@@ -46,6 +46,8 @@ export function calendar(over: Partial<CalendarData> = {}): CalendarData {
   return {
     minDate: "2026-06-01",
     maxDate: "2026-09-01",
+    globalMinDate: "2026-06-01",
+    globalMaxDate: "2026-09-01",
     airports: [
       { selected: true, price: 0, iataCode: "LHR", name: "Heathrow", cityName: "London" },
       { selected: false, price: 2000, iataCode: "LGW", name: "Gatwick", cityName: "London" },
