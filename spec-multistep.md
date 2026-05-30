@@ -273,10 +273,18 @@ This is the stay-definition step.
 - If the backend uses an empty-string package-group ID for an `All packages` option, treat that empty string as a valid selected option in the UI rather than as an unset value
 - If no package group is selected, omit it from API variables instead of sending an empty string
 - The length-of-stay selector must have a visible selected state after boot
-- On boot, inspect the calendar `nightsOptions` facet:
-  - If the API returns a `nights: null` option ("All nights"), default the nights filter to `null` (flexible mode)
-  - If the API returns **no** `nights: null` option, default the nights filter to `1`; never leave the filter unset on offers that require a specific nights value or the calendar API will return an error
-  - If the API returns an **empty** `nightsOptions` array, synthesise a 1–31 chip selector so the user can still pick a stay length; chips show night counts only (no prices); the default selection is `1`
+- On boot, inspect the `nightsOptions` returned by the initial facets call (made with `nights: [1]`) and apply this decision tree:
+
+  | Condition | `nightsFilter` | Calendar refetch? |
+  |---|---|---|
+  | Includes `null` (flexible/All nights) | `null` | No |
+  | Includes `1` but no `null` | `1` | No — initial facets call already used `1` |
+  | Includes other values but NOT `1` and NOT `null` | `null` | Yes — initial call used `1` which is invalid; reload without a nights constraint, using `globalMinDate` to land on the correct month |
+  | Empty array | `1` | No — synthetic 1–31 selector is shown |
+
+  Never force `nightsFilter = 1` when `1` is not a valid option — passing an invalid nights value to the API causes an error.
+
+- If the API returns an **empty** `nightsOptions` array, synthesise a 1–31 chip selector so the user can still pick a stay length; chips show night counts only (no prices); the default selection is `1`
 - If the API returns `All nights` / `nights: null` as the selected/default length filter, keep that chip selected while the user chooses a flexible start and checkout date
 - If the user selects a concrete nights chip, selecting a start date immediately implies the checkout date and must not require a second calendar click
 

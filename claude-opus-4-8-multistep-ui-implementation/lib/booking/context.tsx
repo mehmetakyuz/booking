@@ -331,13 +331,19 @@ export function BookingProvider({
             sid(),
           );
           minDate = facets.minDate;
-          // Auto-correct: if the offer has no flexible-nights option and we are
-          // still on the default null filter, switch to 1 night so the month
-          // fetch receives a valid nights argument.
-          const hasFlexible = facets.nightsOptions.some((n) => n.nights === null);
-          if (!hasFlexible && nightsFilter === null) {
-            nightsFilter = 1;
-            patch({ nightsFilter: 1 });
+          // Auto-correct when nightsFilter is null but the offer requires a
+          // specific nights value. Only switch to 1 if 1 is actually a valid
+          // option. If the offer has [3,5,7] but not 1, leave null so we fetch
+          // without constraint — forcing 1 would be an invalid argument.
+          if (nightsFilter === null) {
+            const hasFlexible = facets.nightsOptions.some((n) => n.nights === null);
+            const hasOne = facets.nightsOptions.some((n) => n.nights === 1);
+            const hasAny = facets.nightsOptions.length > 0;
+            if (!hasFlexible && (hasOne || !hasAny)) {
+              nightsFilter = 1;
+              patch({ nightsFilter: 1 });
+            }
+            // Else: other nights exist but not 1 — leave nightsFilter as null.
           }
         }
 
@@ -686,10 +692,22 @@ export function BookingProvider({
         facets.packageTypes[0];
       const isExcludingFlights = leadingPackageType?.type === "EXCLUDING_FLIGHTS";
 
-      // If the offer has no "All nights" flexible option, default to 1 night so
-      // the calendar API call always receives a valid nights argument.
+      // Determine the correct initial nights filter from the returned facets.
+      // - Flexible (null) option present → keep null
+      // - 1-night option present → use 1 (matches the facets call we just made)
+      // - Other options present but NOT 1 → the initial nights:1 call was
+      //   misaligned; default to null and reload so the calendar is not
+      //   constrained to an invalid nights value
+      // - No options at all → use 1 for the synthetic selector
       const hasFlexibleNights = facets.nightsOptions.some((n) => n.nights === null);
-      const initialNightsFilter: number | null = hasFlexibleNights ? null : 1;
+      const hasOneNight = facets.nightsOptions.some((n) => n.nights === 1);
+      const hasAnyNights = facets.nightsOptions.length > 0;
+
+      const initialNightsFilter: number | null =
+        hasFlexibleNights || hasOneNight ? (hasFlexibleNights ? null : 1)
+        : hasAnyNights ? null   // has options but not 1 — reload without constraint
+        : 1;                    // no options — synthetic range, default to 1
+      const needsNightsReload = hasAnyNights && !hasFlexibleNights && !hasOneNight;
 
       commitPayload({
         packageType: leadingPackageType?.type,
@@ -705,8 +723,9 @@ export function BookingProvider({
       });
       patch({ nightsFilter: initialNightsFilter });
 
-      // Pass facets.minDate as a hint so loadCalendar skips an extra facets
-      // sub-call — the month fetch response supplies the filtered facets.
+      // Always pass facets.minDate so loadCalendar jumps to the right month.
+      // When 1 night was not a valid option, initialNightsFilter is already null
+      // so the month fetch runs without a nights constraint.
       await loadCalendar(initialNightsFilter, facets.minDate);
       patch({ booting: false });
     } catch (e: any) {
