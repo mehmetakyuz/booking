@@ -746,6 +746,12 @@ The normalizer must access `receipt.itinerary.events` (an array), **not** `recei
 
 Verify: after writing the receipt normalizer, confirm every nested access path matches the GraphQL query structure level by level.
 
+#### Parameterized image URLs
+
+`Image` exposes a parameterized `url(w, h, size, dpr)` field, not a bare string. Always request a sized URL, such as `image { url(w: 800) }` or `gallery { url(w: 1280) }`, so cards, galleries, and summary assets load at an appropriate size.
+
+Verify: after writing offer, accommodation, car, or gallery queries, confirm each selected image field calls `url(...)` with sizing arguments rather than selecting a bare `url`.
+
 #### Date selection must trigger receipt immediately
 
 In the dates step, selecting a calendar date with a specific night duration must immediately call the receipt query to reprice. It must NOT wait for the user to click Continue. The Continue button should only advance to the next step — the receipt must already be loaded and valid.

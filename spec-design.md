@@ -71,9 +71,9 @@ The design system is organized around five explicit ingredients from the brand g
 - Option cards must feel consistent across the flow
 - Detail views must use one shared modal pattern
 - The calendar should communicate state mostly through color and pattern, not helper labels
-- When the backend marks a product choice as selected/default, the visible default state in the UI should match that backend choice rather than an arbitrary first-card fallback
+- When a product choice is marked as selected/default by the booking data, the visible default state in the UI should match that choice rather than an arbitrary first-card fallback
 - Avoid redundant derived helper copy. If a piece of text merely restates the currently visible selection without changing the user’s decision, validation state, or next action, omit it.
-- Do not expose raw enum tokens to users. When enum-like backend values need to be shown, map them explicitly to curated user-facing labels rather than applying generic text adjustments.
+- Do not expose raw internal tokens to users. When coded values need to be shown, map them explicitly to curated user-facing labels rather than applying generic text adjustments.
 - Any user-visible copy should be written for the customer, not for implementers. Do not surface internal logic explanations, spec rationale, or conversational intent in the interface.
 
 ---
@@ -130,7 +130,7 @@ The UI should preserve one consistent interaction language:
 - same option-card anatomy wherever content allows it
 - same delta-price logic presentation across product types
 - same loading treatment for similar async states
-- same backend-selected default behavior across product panels
+- same data-selected default behavior across product panels
 - same receipt-derived payment breakdown language on checkout when instalments are selected
 
 ---
@@ -225,8 +225,8 @@ Rules:
 
 Use the supplied asset:
 
-- Source asset: `/Users/mehmet.akyuz/Code/booking/assets/logo-light.svg`
-- Runtime app copy: `/Users/mehmet.akyuz/Code/booking/gpt-5-codex-multistep-ui-implementation/public/logo-light.svg`
+- Source asset: `./assets/logo-light.svg`
+- Runtime app copy: `./gpt-5-codex-multistep-ui-implementation/public/logo-light.svg`
 
 Rules:
 
@@ -283,7 +283,7 @@ Rules:
 ### Occupancy field
 
 - render as one summary field that opens a dropdown panel
-- if occupancy is fixed by backend rules, render the same compact field shell as read-only
+- if occupancy is fixed by booking rules, render the same compact field shell as read-only
 - when occupancy is editable, keep the dropdown panel open while the user adjusts adults, children, and child ages; commit those changes only on an explicit submit action
 - style the open occupancy panel as one continuous surface with internal row dividers, not as a stack of bordered mini-cards
 
@@ -315,13 +315,13 @@ Where content allows, option cards should follow this anatomy:
 
 Price rules:
 
-- use the backend-selected default option as the baseline
+- use the data-selected default option as the baseline
 - only that baseline gets `Included`
 - tied non-baselines show `+£0`
 - cheaper alternatives may show negative deltas
 - show the resulting total package price as a smaller secondary line under the delta where useful
 - do not add explanatory sublabels like `Base stay` or `Hotel upgrade`
-- all API price values are in minor units (pence / cents); divide by 100 at the render boundary and format with the offer currency — see spec-api.md §Money units
+- format all prices as localized currency; money-unit handling is defined in spec-api.md §Money units
 
 Product-specific notes:
 
@@ -356,7 +356,7 @@ The right column is one unified component:
 Additional rules:
 
 - do not show a static lead price once live receipt pricing exists
-- do not repeat nights or airport as fallback scalar lines when the backend already provides richer itinerary data
+- do not repeat nights or airport as fallback scalar lines when richer itinerary data is available
 - do not show “Based on 2 adults sharing”
 - do not show payment-plan rows in the persistent summary
 - detailed itinerary belongs behind a button and modal
@@ -374,7 +374,7 @@ Use icons in both:
 
 - accommodation cards should stay visually compact and should not enumerate hotel or room facilities inline
 - accommodation facilities should be shown in the accommodation-details modal using real representative icons, not letter badges
-- accommodation facility iconography should key off backend facility `icon` tokens, not string heuristics on translated labels; the icon map should be explicit and stable
+- accommodation facility iconography should key off facility icon tokens, not string heuristics on translated labels; the icon map should be explicit and stable
 - where a shared icon library is already present in the implementation, reuse it for facility chips instead of inventing bespoke SVG artwork
 - photography should remain premium, realistic, and not over-processed
 
@@ -386,9 +386,9 @@ The receipt itinerary must render as a **vertical timeline**, not a flat list or
 - Each event has a circular dot marker on the line
 - Event content sits to the right of the timeline rail
 
-Component type indicators must use **inline SVG icons**, not text labels. Never render raw GraphQL `__typename` values or type strings like `ItineraryFlightComponent` to the user. Use a mapping:
+Component type indicators must use **inline SVG icons**, not text labels. Use a mapping from component categories:
 
-| API type (case-insensitive) | Icon |
+| Component category | Icon |
 |---|---|
 | `accommodation` | Building/hotel |
 | `flight` | Airplane |
@@ -396,7 +396,7 @@ Component type indicators must use **inline SVG icons**, not text labels. Never 
 | `activity`, `leisure` | Clock/activity |
 | `transfer` | Shuttle/transfer |
 
-The normalized `type` values map from these `__typename`s: `ItineraryAccommodationComponent` → `accommodation`, `ItineraryFlightComponent` → `flight`, `ItineraryCarComponent` → `car`, `ItineraryLeisureComponent` → `activity`, `ItineraryTransferComponent` → `transfer`. Provide a fallback icon for any unmapped type.
+Provide a fallback icon for any unmapped category. Category definitions belong in spec-api.md.
 
 The same timeline treatment applies to both:
 - The compact preview in the receipt sidebar (up to 3 events with "View full itinerary" link)
@@ -427,12 +427,6 @@ The same timeline treatment applies to both:
 | `radius-lg` | `6px` |
 | `radius-full` | `9999px` |
 
-### API data shape pitfalls (design-relevant)
-
-- `facilities` in accommodation responses are objects like `{name, icon}` rather than strings on the accommodation query path. Preserve the backend `icon` token so facility iconography can map from stable backend values; use `.name` only for customer-facing text.
-- `itinerary` in receipt responses is `{events: [...]}`, not a flat array. Access `receipt.itinerary.events` in the normalizer.
-- `Image` exposes a parameterized `url(w, h, size, dpr)` field, not a bare string. Always request a sized URL (e.g. `image { url(w: 800) }`, `gallery { url(w: 1280) }`) so cards, galleries, and the summary header load appropriately sized assets.
-
 ### Visual validation checklist
 
 The implementation is design-complete only if:
@@ -445,7 +439,7 @@ The implementation is design-complete only if:
 - primary CTA uses orange
 - the calendar matches the quiet editorial treatment
 - all detail modals share one structure
-- itinerary uses SVG icons (not text labels or GraphQL type names) for component types
+- itinerary uses SVG icons, not text labels or internal type names, for component types
 - itinerary renders as a vertical timeline with connecting line and dots, not a flat list
 - the receipt total row is visually distinct with weight and separator
 - the itinerary preview shows compact rows with date, label, and type badges
