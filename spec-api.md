@@ -528,6 +528,10 @@ Schema note:
 
 - do not assume nested `id` fields are available on receipt itinerary accommodation objects
 - nested `name` fields are safe and sufficient for UI rendering
+- `ItineraryLeisureComponent.label` is the generic string `"Activity"`; the
+  specific activity name arrives in `sublabel`. UIs that must show specific
+  activity names (itinerary preview/modal) must prefer `sublabel` for leisure
+  components.
 
 #### Itinerary component types
 
@@ -705,7 +709,10 @@ It should include at minimum:
 - `packageGroup`
 - `properties`
 - `deferred`
-- `priceSeen`
+
+Schema note: unlike `dynamicPackageReceipt`, the live `createOrder` mutation has
+**no `priceSeen` argument** — sending one is a query error. `priceSeen` is only
+echoed on receipt requests.
 
 Response shape:
 

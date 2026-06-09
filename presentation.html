@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spec-Based Development — Secret Escapes Booking</title>
+<style>
+  :root {
+    --se-red: #e8003d;
+    --se-dark: #1a1a2e;
+    --se-grey: #f5f5f5;
+    --se-mid: #6b7280;
+    --se-light: #ffffff;
+    --mono: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0d0d1a;
+    color: var(--se-light);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .deck {
+    width: 100%;
+    height: 100vh;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transform: translateX(40px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    pointer-events: none;
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+
+  /* Slide types */
+  .slide--cover { background: var(--se-dark); }
+  .slide--light { background: #f9f9fb; color: #111; }
+  .slide--red { background: var(--se-red); }
+  .slide--dark { background: #111827; }
+  .slide--code { background: #0f172a; }
+
+  /* Typography */
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 16px;
+    font-weight: 500;
+  }
+
+  h1 { font-size: clamp(36px, 5vw, 64px); font-weight: 700; line-height: 1.1; }
+  h2 { font-size: clamp(28px, 3.5vw, 48px); font-weight: 700; line-height: 1.15; }
+  h3 { font-size: clamp(18px, 2vw, 24px); font-weight: 600; }
+
+  .subtitle {
+    font-size: clamp(16px, 1.8vw, 22px);
+    opacity: 0.65;
+    margin-top: 16px;
+    line-height: 1.5;
+    max-width: 640px;
+    text-align: center;
+  }
+
+  .body {
+    font-size: clamp(15px, 1.6vw, 19px);
+    line-height: 1.7;
+    opacity: 0.85;
+    max-width: 700px;
+  }
+
+  /* Layout helpers */
+  .center { text-align: center; align-items: center; }
+  .cols { display: grid; gap: 40px; width: 100%; max-width: 1100px; }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  /* Cards */
+  .card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 28px 32px;
+  }
+
+  .card--light {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 28px 32px;
+    color: #111;
+  }
+
+  .card h3 { margin-bottom: 10px; }
+  .card p { font-size: 15px; opacity: 0.7; line-height: 1.6; }
+
+  /* Tag */
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+  }
+
+  .tag--red { background: var(--se-red); color: white; }
+  .tag--blue { background: #2563eb; color: white; }
+  .tag--green { background: #059669; color: white; }
+  .tag--grey { background: #374151; color: white; }
+  .tag--orange { background: #d97706; color: white; }
+
+  /* Step list */
+  .steps { list-style: none; width: 100%; max-width: 700px; }
+  .steps li {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-size: 17px;
+  }
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--se-red);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* Code block */
+  .code-block {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 24px 28px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.8;
+    color: #94a3b8;
+    width: 100%;
+    max-width: 760px;
+  }
+  .code-block .hi { color: #f472b6; }
+  .code-block .str { color: #86efac; }
+  .code-block .kw { color: #60a5fa; }
+  .code-block .comment { color: #475569; }
+
+  /* Demo link */
+  .demo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .demo-link:hover { background: rgba(255,255,255,0.18); }
+  .demo-link svg { opacity: 0.7; }
+
+  /* Model comparison table */
+  .model-table { width: 100%; max-width: 960px; border-collapse: collapse; }
+  .model-table th {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .model-table td {
+    padding: 14px 16px;
+    font-size: 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    vertical-align: middle;
+  }
+  .model-table tr:hover td { background: rgba(255,255,255,0.03); }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot--green { background: #34d399; }
+  .dot--yellow { background: #fbbf24; }
+  .dot--grey { background: #6b7280; }
+
+  /* Logo */
+  .logo {
+    position: fixed;
+    top: 24px;
+    left: 32px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    opacity: 0.35;
+    z-index: 100;
+  }
+
+  /* Nav */
+  .nav {
+    position: fixed;
+    bottom: 32px;
+    right: 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 100;
+  }
+
+  .nav-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.06);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: background 0.2s;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.14); }
+
+  .nav-counter {
+    font-size: 12px;
+    opacity: 0.4;
+    font-variant-numeric: tabular-nums;
+    min-width: 48px;
+    text-align: center;
+  }
+
+  /* Progress dots */
+  .progress {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 100;
+  }
+  .pdot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: background 0.2s;
+    cursor: pointer;
+  }
+  .pdot.on { background: rgba(255,255,255,0.8); }
+
+  /* Highlight box */
+  .highlight-box {
+    border-left: 3px solid var(--se-red);
+    padding: 16px 20px;
+    background: rgba(232, 0, 61, 0.08);
+    border-radius: 0 8px 8px 0;
+    font-size: 16px;
+    line-height: 1.6;
+    max-width: 700px;
+  }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 900px;
+  }
+
+  .flow-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flow-box {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .flow-box.active-box { background: rgba(232,0,61,0.15); border-color: var(--se-red); }
+
+  .flow-arrow {
+    font-size: 20px;
+    opacity: 0.3;
+    padding: 0 8px;
+    align-self: center;
+    margin-top: -20px;
+  }
+
+  .flow-label { font-size: 11px; opacity: 0.45; }
+
+  .slide--light .card--light { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+  .slide--light .eyebrow { color: #6b7280; }
+  .slide--light h2 { color: #111; }
+
+  /* Booking steps */
+  .booking-steps {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    width: 100%;
+    max-width: 1000px;
+  }
+  .bstep {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    text-align: center;
+  }
+  .bstep .num {
+    font-size: 11px;
+    opacity: 0.4;
+    font-weight: 600;
+  }
+  .bstep .label {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .bstep .api {
+    font-size: 10px;
+    font-family: var(--mono);
+    opacity: 0.4;
+    line-height: 1.5;
+  }
+  .bstep.async { border-color: rgba(232,0,61,0.4); background: rgba(232,0,61,0.07); }
+
+  /* Vs divider */
+  .vs-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 0 24px;
+  }
+  .vs-line { width: 1px; height: 40px; background: rgba(255,255,255,0.12); }
+  .vs-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; opacity: 0.3; }
+
+  /* Loop diagram */
+  .loop {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: nowrap;
+  }
+  .loop-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .loop-box {
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .loop-sub { font-size: 12px; opacity: 0.4; max-width: 110px; text-align: center; line-height: 1.4; }
+  .loop-arrow { font-size: 18px; opacity: 0.3; padding: 0 10px; margin-bottom: 22px; }
+</style>
+</head>
+<body>
+
+<div class="logo">Secret Escapes × Spec-Based Dev</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1. Cover -->
+  <div class="slide slide--cover center active" data-index="0">
+    <div class="eyebrow">An Experiment</div>
+    <h1>Spec-Based<br>Development</h1>
+    <p class="subtitle">Build iteratively. Persist the context as a spec. Let AI models re-implement it independently.</p>
+  </div>
+
+  <!-- 2. The Hypothesis -->
+  <div class="slide slide--dark center" data-index="1">
+    <div class="eyebrow">The Hypothesis</div>
+    <h2 style="max-width:720px; text-align:center;">What if the context built up during development was precise enough for <span style="color:var(--se-red)">any AI model</span> to re-implement the same product independently?</h2>
+    <p class="subtitle" style="margin-top:24px;">The spec is the persisted context.<br>The code is a consequence of it.</p>
+  </div>
+
+  <!-- 3. How the spec was made -->
+  <div class="slide slide--light" data-index="2">
+    <div class="eyebrow" style="color:#6b7280">How it worked</div>
+    <h2 style="color:#111; margin-bottom:40px;">The spec is context, persisted</h2>
+    <div style="display:flex; align-items:center; gap:0; width:100%; max-width:900px;">
+      <div class="card--light" style="flex:1;">
+        <div class="tag tag--grey">Step 1</div>
+        <h3 style="margin-bottom:8px;">Develop iteratively</h3>
+        <p>A working implementation was built through iteration — decisions made, APIs discovered, edge cases resolved. Wired to the live API throughout.</p>
+      </div>
+      <div style="font-size:28px; opacity:0.25; padding:0 20px; flex-shrink:0;">→</div>
+      <div class="card--light" style="flex:1;">
+        <div class="tag tag--orange">Step 2</div>
+        <h3 style="margin-bottom:8px;">Persist the context</h3>
+        <p>Each decision, constraint, and API behavior discovered during development was written down as a spec. The spec captures what was learned, not what was imagined.</p>
+      </div>
+      <div style="font-size:28px; opacity:0.25; padding:0 20px; flex-shrink:0;">→</div>
+      <div class="card--light" style="flex:1; border-color:#e8003d; border-width:2px;">
+        <div class="tag tag--red">Step 3</div>
+        <h3 style="margin-bottom:8px;">Let models re-implement</h3>
+        <p>The spec — not the code — is handed to each AI model. Every implementation is independent. The only variable is the model.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3b. Why implementation must come first -->
+  <div class="slide slide--dark" data-index="3">
+    <div class="eyebrow">Why this order matters</div>
+    <h2 style="margin-bottom:36px; max-width:760px;">A spec written without building is just a guess</h2>
+    <div style="display:flex; align-items:stretch; width:100%; max-width:920px; gap:0;">
+      <div class="card" style="flex:1; border-color:rgba(255,255,255,0.08); opacity:0.7;">
+        <div class="tag tag--grey" style="margin-bottom:12px;">Pure spec-first</div>
+        <h3 style="margin-bottom:10px;">Waterfall in disguise</h3>
+        <p>Writing a spec before touching the system assumes you already know how it will behave. You don't. Real systems surface surprises the moment you engage with them. The spec becomes aspirational fiction — correct in theory, wrong in practice.</p>
+      </div>
+      <div class="vs-divider">
+        <div class="vs-line"></div>
+        <div class="vs-label">VS</div>
+        <div class="vs-line"></div>
+      </div>
+      <div class="card" style="flex:1; border-color:rgba(232,0,61,0.35); background:rgba(232,0,61,0.06);">
+        <div class="tag tag--red" style="margin-bottom:12px;">Implementation-driven</div>
+        <h3 style="margin-bottom:10px;">Agile by design</h3>
+        <p>Each iteration teaches you something you couldn't have known upfront. The spec is updated as you go. It stays accurate because it reflects what was built and tested, not what was imagined.</p>
+      </div>
+    </div>
+    <div class="loop" style="margin-top:36px;">
+      <div class="loop-node">
+        <div class="loop-box" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);">Build</div>
+        <div class="loop-sub">engage the real system</div>
+      </div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-node">
+        <div class="loop-box" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);">Discover</div>
+        <div class="loop-sub">learn what you couldn't anticipate</div>
+      </div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-node">
+        <div class="loop-box" style="background:rgba(232,0,61,0.15); border:1px solid rgba(232,0,61,0.4);">Document</div>
+        <div class="loop-sub">persist the learning as spec</div>
+      </div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-node">
+        <div class="loop-box" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);">Repeat</div>
+        <div class="loop-sub">spec tightens with every cycle</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. The Spec -->
+  <div class="slide slide--dark" data-index="5">
+    <div class="eyebrow">The Artifact</div>
+    <h2 style="margin-bottom:36px;">Four specification documents</h2>
+    <div class="cols cols-2" style="max-width:860px;">
+      <div class="card">
+        <div class="tag tag--blue">spec.md</div>
+        <h3 style="margin-bottom:8px;">Master spec</h3>
+        <p>Phase lifecycle, architecture constraints, definition of done, validation checklist. The entrypoint every model reads first.</p>
+      </div>
+      <div class="card">
+        <div class="tag tag--blue">spec-multistep.md</div>
+        <h3 style="margin-bottom:8px;">UX spec</h3>
+        <p>Step-by-step layout, state transitions, edge cases. The wizard pattern with a persistent receipt sidebar.</p>
+      </div>
+      <div class="card">
+        <div class="tag tag--blue">spec-api.md</div>
+        <h3 style="margin-bottom:8px;">API spec</h3>
+        <p>GraphQL operations, TypeScript types, async polling pattern for flights and cars, product replacement rules.</p>
+      </div>
+      <div class="card">
+        <div class="tag tag--blue">spec-design.md</div>
+        <h3 style="margin-bottom:8px;">Design spec</h3>
+        <p>Brand tokens, Zodiak-Bold typography, 8-point grid, button and card component patterns, color palette.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. The Product -->
+  <div class="slide slide--dark center" data-index="4">
+    <div class="eyebrow">The Product</div>
+    <h2 style="margin-bottom:36px;">Secret Escapes booking flow — 7 steps</h2>
+    <div class="booking-steps">
+      <div class="bstep">
+        <span class="num">1</span>
+        <span class="label">Dates</span>
+        <span class="api">getOffer<br>getOfferCalendar</span>
+      </div>
+      <div class="bstep">
+        <span class="num">2</span>
+        <span class="label">Rooms</span>
+        <span class="api">getDynamic­Package­Accomm­odations</span>
+      </div>
+      <div class="bstep">
+        <span class="num">3</span>
+        <span class="label">Activities</span>
+        <span class="api">getDynamic­Package­Leisures</span>
+      </div>
+      <div class="bstep async">
+        <span class="num">4</span>
+        <span class="label">Flights ⚡</span>
+        <span class="api">startTask­Group<br>→ poll</span>
+      </div>
+      <div class="bstep async">
+        <span class="num">5</span>
+        <span class="label">Cars ⚡</span>
+        <span class="api">startTask­Group<br>→ poll</span>
+      </div>
+      <div class="bstep">
+        <span class="num">6</span>
+        <span class="label">Checkout</span>
+        <span class="api">getDynamic­Package­Info­For­Form</span>
+      </div>
+      <div class="bstep" style="border-color:rgba(52,211,153,0.4); background:rgba(52,211,153,0.06)">
+        <span class="num">★</span>
+        <span class="label">Receipt</span>
+        <span class="api">getDynamic­Package­Receipt</span>
+      </div>
+    </div>
+    <p style="margin-top:20px; font-size:13px; opacity:0.35;">⚡ = async task-group polling &nbsp;|&nbsp; ★ = live after every step</p>
+  </div>
+
+  <!-- 6. Spec examples -->
+  <div class="slide slide--dark" data-index="5">
+    <div class="eyebrow">Inside the spec</div>
+    <h2 style="margin-bottom:28px;">Each document encodes a different layer of truth</h2>
+    <div class="cols cols-2" style="max-width:1040px; gap:16px;">
+
+      <div class="card" style="padding:20px 24px;">
+        <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
+          <div class="tag tag--blue" style="margin:0;">spec.md &nbsp;·&nbsp; Master</div>
+        </div>
+        <div style="font-size:12px; opacity:0.5; margin-bottom:10px; line-height:1.5;">Full plan, architecture, and workflow — the entrypoint every model reads first. Defines the phases, the tech stack, the definition of done, and the mandatory validation process.</div>
+        <p style="font-size:12px; font-family:var(--mono); line-height:1.8; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.07); padding-top:10px;">
+          Phase 1 Specify → Phase 2 Plan<br>
+          → Phase 3 Task → Phase 4 Implement<br>
+          → <span style="color:#86efac;">Phase 5 Validate (mandatory)</span>
+        </p>
+      </div>
+
+      <div class="card" style="padding:20px 24px;">
+        <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
+          <div class="tag tag--blue" style="margin:0;">spec-multistep.md &nbsp;·&nbsp; UX</div>
+        </div>
+        <div style="font-size:12px; opacity:0.5; margin-bottom:10px; line-height:1.5;">Every user-visible behaviour, step transition, loading state, and edge case. Precise enough that no design file is needed.</div>
+        <p style="font-size:12px; font-family:var(--mono); line-height:1.8; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.07); padding-top:10px;">
+          CTA must name the next step:<br>
+          <span style="color:#86efac;">"Step 2. Rooms"</span><br>
+          Back preserves selections. Step 1 has no Back.
+        </p>
+      </div>
+
+      <div class="card" style="padding:20px 24px;">
+        <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
+          <div class="tag tag--blue" style="margin:0;">spec-api.md &nbsp;·&nbsp; API</div>
+        </div>
+        <div style="font-size:12px; opacity:0.5; margin-bottom:10px; line-height:1.5;">Full API documentation with every query, mutation, type definition, payload contract, and worked examples — including non-obvious invariants discovered during development.</div>
+        <p style="font-size:12px; font-family:var(--mono); line-height:1.8; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.07); padding-top:10px;">
+          Prices are minor-unit integers.<br>
+          <span style="color:#86efac;">Divide by 100 at render only.</span><br>
+          £1,563 not £156,300.
+        </p>
+      </div>
+
+      <div class="card" style="padding:20px 24px;">
+        <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
+          <div class="tag tag--blue" style="margin:0;">spec-design.md &nbsp;·&nbsp; Design system</div>
+        </div>
+        <div style="font-size:12px; opacity:0.5; margin-bottom:10px; line-height:1.5;">Complete design language system — color palette, typography scale, spacing grid, every component pattern. No Figma file needed.</div>
+        <p style="font-size:12px; font-family:var(--mono); line-height:1.8; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.07); padding-top:10px;">
+          <span style="color:#fb923c;">Orange</span> → primary CTAs<br>
+          <span style="color:#67e8f9;">Turquoise</span> → selection states<br>
+          <span style="color:#f87171;">Red</span> → errors only
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 7. The Models -->
+  <div class="slide slide--dark" data-index="6">
+    <div class="eyebrow">The Experiment</div>
+    <h2 style="margin-bottom:36px;">Four implementations, same spec</h2>
+    <table class="model-table">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>UI Paradigm</th>
+          <th>Status</th>
+          <th>Demo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div style="font-weight:600;">Claude Opus 4.7</div>
+            <div style="font-size:12px;opacity:0.4;font-family:var(--mono);">claude-opus-4-7-multistep-ui-implementation</div>
+          </td>
+          <td><span class="tag tag--blue" style="margin:0;">Multi-step wizard</span></td>
+          <td><span class="dot dot--green"></span> &nbsp;Implemented</td>
+          <td>
+            <a href="#" class="demo-link" style="padding:6px 14px; font-size:12px;">
+              + Add Vercel link
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div style="font-weight:600;">Claude Opus 4.8</div>
+            <div style="font-size:12px;opacity:0.4;font-family:var(--mono);">claude-opus-4-8-multistep-ui-implementation</div>
+          </td>
+          <td><span class="tag tag--blue" style="margin:0;">Multi-step wizard</span></td>
+          <td><span class="dot dot--green"></span> &nbsp;Implemented</td>
+          <td>
+            <a href="#" class="demo-link" style="padding:6px 14px; font-size:12px;">
+              + Add Vercel link
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div style="font-weight:600;">GPT-5.5</div>
+            <div style="font-size:12px;opacity:0.4;font-family:var(--mono);">gpt-5.5-multistep-ui-implementation</div>
+          </td>
+          <td><span class="tag tag--blue" style="margin:0;">Multi-step wizard</span></td>
+          <td><span class="dot dot--green"></span> &nbsp;Implemented</td>
+          <td>
+            <a href="#" class="demo-link" style="padding:6px 14px; font-size:12px;">
+              + Add Vercel link
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div style="font-weight:600;">Claude Fable 5</div>
+            <div style="font-size:12px;opacity:0.4;font-family:var(--mono);">claude-fable-5-multistep-ui-implementation</div>
+          </td>
+          <td><span class="tag tag--blue" style="margin:0;">Multi-step wizard</span></td>
+          <td><span class="dot dot--yellow"></span> &nbsp;In progress</td>
+          <td>
+            <a href="#" class="demo-link" style="padding:6px 14px; font-size:12px; opacity:0.4; pointer-events:none;">
+              + Add Vercel link
+            </a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 8. Cost -->
+  <div class="slide slide--code" data-index="8">
+    <div class="eyebrow">Claude Fable 5 — implementation cost</div>
+    <h2 style="margin-bottom:36px;">One full implementation, under an hour</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; width:100%; max-width:960px;">
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="card" style="padding:20px 24px; text-align:center;">
+            <div style="font-size:36px; font-weight:700; color:#f9fafb; letter-spacing:-1px;">$26.66</div>
+            <div style="font-size:12px; opacity:0.4; margin-top:6px; text-transform:uppercase; letter-spacing:0.08em;">Total cost</div>
+          </div>
+          <div class="card" style="padding:20px 24px; text-align:center;">
+            <div style="font-size:36px; font-weight:700; color:#f9fafb; letter-spacing:-1px;">54m</div>
+            <div style="font-size:12px; opacity:0.4; margin-top:6px; text-transform:uppercase; letter-spacing:0.08em;">Wall time</div>
+          </div>
+        </div>
+        <div class="card" style="padding:20px 24px; text-align:center;">
+          <div style="font-size:36px; font-weight:700; color:#34d399; letter-spacing:-1px;">7,210</div>
+          <div style="font-size:12px; opacity:0.4; margin-top:6px; text-transform:uppercase; letter-spacing:0.08em;">Lines of code written</div>
+        </div>
+      </div>
+
+      <div class="code-block" style="margin:0; font-size:12px; display:flex; flex-direction:column; justify-content:center;">
+        <div style="color:#f472b6; margin-bottom:10px; font-size:13px; font-weight:600;">claude-fable-5</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; margin-bottom:16px;">
+          <div style="opacity:0.45;">input</div><div style="color:#f9fafb;">27.5k tokens</div>
+          <div style="opacity:0.45;">output</div><div style="color:#f9fafb;">167.4k tokens</div>
+          <div style="opacity:0.45;">cache read</div><div style="color:#f9fafb;">14.1m tokens</div>
+          <div style="opacity:0.45;">cache write</div><div style="color:#f9fafb;">309.4k tokens</div>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:16px; display:flex; justify-content:space-between; align-items:baseline;">
+          <div style="opacity:0.4; font-size:11px; text-transform:uppercase; letter-spacing:0.1em;">Total</div>
+          <div style="color:#34d399; font-size:22px; font-weight:700;">$26.66</div>
+        </div>
+      </div>
+
+    </div>
+    <p style="margin-top:20px; font-size:13px; opacity:0.3;">32m 25s API time &nbsp;·&nbsp; 54m 56s wall time</p>
+  </div>
+
+  <!-- 9. Phase lifecycle -->
+  <div class="slide slide--dark center" data-index="7">
+    <div class="eyebrow">Methodology</div>
+    <h2 style="margin-bottom:44px;">The phase lifecycle every model follows</h2>
+    <div class="flow">
+      <div class="flow-item">
+        <div class="flow-box">
+          <div style="font-size:11px;opacity:0.4;margin-bottom:4px;">Phase 1</div>
+          Specify
+        </div>
+        <div class="flow-label">4 documents</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">
+        <div class="flow-box">
+          <div style="font-size:11px;opacity:0.4;margin-bottom:4px;">Phase 2</div>
+          Plan
+        </div>
+        <div class="flow-label">Architecture</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">
+        <div class="flow-box">
+          <div style="font-size:11px;opacity:0.4;margin-bottom:4px;">Phase 3</div>
+          Task
+        </div>
+        <div class="flow-label">17 workstreams</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">
+        <div class="flow-box">
+          <div style="font-size:11px;opacity:0.4;margin-bottom:4px;">Phase 4</div>
+          Implement
+        </div>
+        <div class="flow-label">Zero human code</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">
+        <div class="flow-box active-box">
+          <div style="font-size:11px;opacity:0.6;margin-bottom:4px;">Phase 5</div>
+          Validate
+        </div>
+        <div class="flow-label" style="color:var(--se-red);opacity:1;">Mandatory</div>
+      </div>
+    </div>
+    <div class="highlight-box" style="margin-top:36px;">
+      <strong>Phase 5 is not optional.</strong> A successful build is not sufficient. The model must open the app in a browser and verify every interaction against the live API.
+    </div>
+  </div>
+
+  <!-- 9. What the spec encodes -->
+  <div class="slide slide--code" data-index="8">
+    <div class="eyebrow" style="opacity:0.4;">From spec-api.md — async polling pattern</div>
+    <div class="code-block">
+<span class="comment">// The spec defines exactly how flights/cars are fetched</span>
+<span class="kw">async function</span> <span class="hi">pollTaskGroup</span>(sessionId, taskGroupId) {
+  <span class="kw">while</span> (<span class="kw">true</span>) {
+    <span class="kw">const</span> { status, results } = <span class="kw">await</span> graphql(<span class="str">`
+      query PollTaskGroup($id: ID!) {
+        taskGroup(id: $id) {
+          status   <span class="comment"># PENDING | RUNNING | COMPLETE</span>
+          results { ... FlightFields }
+        }
+      }
+    `</span>);
+
+    <span class="kw">if</span> (status === <span class="str">'COMPLETE'</span>) <span class="kw">return</span> results;
+    <span class="kw">await</span> sleep(<span class="hi">2000</span>); <span class="comment">// 2s poll interval from spec</span>
+  }
+}
+    </div>
+    <p style="margin-top:20px; font-size:14px; opacity:0.4;">The spec defines the pattern. Every model implements it. No discussion needed.</p>
+  </div>
+
+  <!-- 10. Key observations -->
+  <div class="slide slide--light" data-index="9">
+    <div class="eyebrow">Observations</div>
+    <h2 style="color:#111; margin-bottom:36px;">What spec-based development reveals</h2>
+    <div class="cols cols-3" style="max-width:960px;">
+      <div class="card--light">
+        <div class="tag tag--red">Precision</div>
+        <h3 style="margin-bottom:8px;">Ambiguity is the enemy</h3>
+        <p>Vague specs produce divergent implementations. Every edge case documented is one fewer thing a model has to invent.</p>
+      </div>
+      <div class="card--light">
+        <div class="tag tag--green">Repeatability</div>
+        <h3 style="margin-bottom:8px;">Same input, comparable output</h3>
+        <p>The same spec handed to different models produces implementations that can be directly compared and evaluated.</p>
+      </div>
+      <div class="card--light">
+        <div class="tag tag--blue">Validation</div>
+        <h3 style="margin-bottom:8px;">Compile ≠ correct</h3>
+        <p>Phase 5 (browser validation against the live API) is what separates a working implementation from one that just builds.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 11. Compare slide (placeholder for demo links) -->
+  <div class="slide slide--dark center" data-index="10">
+    <div class="eyebrow">Live Demos</div>
+    <h2 style="margin-bottom:40px;">Compare the implementations</h2>
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; max-width:1100px; width:100%;">
+      <div class="card center" style="gap:16px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; min-height:200px;">
+        <div>
+          <div class="tag tag--blue" style="margin-bottom:12px;">Anthropic</div>
+          <h3>Claude Opus 4.7</h3>
+          <p style="margin-top:8px; font-size:14px;">Multi-step wizard implementation</p>
+        </div>
+        <a href="#" class="demo-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          View on Vercel
+        </a>
+      </div>
+      <div class="card center" style="gap:16px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; min-height:200px; border-color:rgba(232,0,61,0.4);">
+        <div>
+          <div class="tag tag--red" style="margin-bottom:12px;">Anthropic</div>
+          <h3>Claude Opus 4.8</h3>
+          <p style="margin-top:8px; font-size:14px;">Multi-step wizard implementation</p>
+        </div>
+        <a href="#" class="demo-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          View on Vercel
+        </a>
+      </div>
+      <div class="card center" style="gap:16px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; min-height:200px;">
+        <div>
+          <div class="tag tag--green" style="margin-bottom:12px;">OpenAI</div>
+          <h3>GPT-5.5</h3>
+          <p style="margin-top:8px; font-size:14px;">Multi-step wizard implementation</p>
+        </div>
+        <a href="#" class="demo-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          View on Vercel
+        </a>
+      </div>
+      <div class="card center" style="gap:16px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; min-height:200px; opacity:0.5; border-style:dashed;">
+        <div>
+          <div class="tag tag--orange" style="margin-bottom:12px;">Anthropic</div>
+          <h3>Claude Fable 5</h3>
+          <p style="margin-top:8px; font-size:14px;">Multi-step wizard implementation</p>
+          <p style="margin-top:6px; font-size:12px; opacity:0.6;">In progress</p>
+        </div>
+        <span class="demo-link" style="padding:6px 14px; font-size:12px; opacity:0.4; cursor:default;">
+          Coming soon
+        </span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Progress dots -->
+<div class="progress" id="progress"></div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button class="nav-btn" id="prev" onclick="go(-1)">←</button>
+  <span class="nav-counter" id="counter">1 / 11</span>
+  <button class="nav-btn" id="next" onclick="go(1)">→</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  let current = 0;
+
+  // Build progress dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'pdot' + (i === 0 ? ' on' : '');
+    d.onclick = () => goTo(i);
+    progress.appendChild(d);
+  });
+
+  function goTo(n) {
+    if (n < 0 || n >= slides.length) return;
+    slides[current].classList.remove('active');
+    slides[current].classList.add('exit');
+    setTimeout(() => slides[current - (current > n ? -1 : 0) + (current > n ? 0 : 0)].classList.remove('exit'), 350);
+
+    // Clear exit from old
+    const old = current;
+    setTimeout(() => slides[old].classList.remove('exit'), 350);
+
+    current = n;
+    slides[current].classList.add('active');
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+
+    document.querySelectorAll('.pdot').forEach((d, i) => {
+      d.classList.toggle('on', i === current);
+    });
+  }
+
+  function go(dir) { goTo(current + dir); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') go(1);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') go(-1);
+  });
+
+  // Touch swipe
+  let tx = 0;
+  document.addEventListener('touchstart', e => tx = e.touches[0].clientX);
+  document.addEventListener('touchend', e => {
+    const dx = tx - e.changedTouches[0].clientX;
+    if (Math.abs(dx) > 50) go(dx > 0 ? 1 : -1);
+  });
+</script>
+</body>
+</html>
